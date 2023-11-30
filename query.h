@@ -32,7 +32,7 @@ void Query::mine() {
 
     Gap_BIDE fsm(travel_paths, m, d);
     map<vector<int>, vector<Appearance>> &sequences = fsm.frequent_sequential_mining();
-    cout<<"fsm: "<<static_cast<double>(clock() - begin_time) / CLOCKS_PER_SEC<<", ";
+    cout<<"fsm: "<<static_cast<double>(clock() - begin_time) / CLOCKS_PER_SEC<<"s("<<sequences.size()<<"), ";
 
     clock_t record_time = clock();
     BIDE_Verifier verifier(travel_paths, m, k, d, eps);
@@ -53,23 +53,23 @@ void Query::mine() {
     cout<<"numbers: "<<numbers<<",";
     cout<<"total time: "<<static_cast<double>(clock() - begin_time) / CLOCKS_PER_SEC<<endl;
 
-    for(auto &object_entry : results){
-        auto &object_ids = object_entry.first;
-        cout<<"{";
-        for(const int &object_id : object_ids){
-            cout<<travel_paths[object_id].object_name;
-            if(&object_id != &object_ids.back()) cout<<",";
-        }
-        cout<<"}:[";
-        for(auto &path_entry : object_entry.second){
-            for(const int &camera : path_entry.first){
-                cout<<camera;
-                if(&camera != &path_entry.first.back()) cout<<"-";
-            }
-            cout<<", ";
-        }
-        cout<<"]"<<endl;
-    }
+//    for(auto &object_entry : results){
+//        auto &object_ids = object_entry.first;
+//        cout<<"{";
+//        for(const int &object_id : object_ids){
+//            cout<<travel_paths[object_id].object_name;
+//            if(&object_id != &object_ids.back()) cout<<",";
+//        }
+//        cout<<"}:[";
+//        for(auto &path_entry : object_entry.second){
+//            for(const int &camera : path_entry.first){
+//                cout<<camera;
+//                if(&camera != &path_entry.first.back()) cout<<"-";
+//            }
+//            cout<<", ";
+//        }
+//        cout<<"]"<<endl;
+//    }
 
 }
 

@@ -69,30 +69,29 @@ public:
 };
 
 void Gap_BIDE::pattern_growth(vector<int> &sequence, pair<int, vector<Appearance>> &appearances) {
-    map<int, pair<int, vector<Appearance>>> backward_items;
-    backward_check(appearances, backward_items);
-    bool need_prune = false, has_backward_extension = false;
-    for(auto &entry : backward_items){
-        if(entry.second.second.size() == appearances.second.size()){
-            need_prune = true;
-            break;
-        }
-        if(entry.second.first == appearances.first) has_backward_extension = true;
-    }
-    if(need_prune) return;
+//    map<int, pair<int, vector<Appearance>>> backward_items;
+//    backward_check(appearances, backward_items);
+//    bool need_prune = false;
+//    for(auto &entry : backward_items){
+//        if(entry.second.second.size() == appearances.second.size()){
+//            need_prune = true;
+//            break;
+//        }
+//    }
+//    if(need_prune) return;
 
     map<int, pair<int, vector<Appearance>>> forward_items;
     forward_check(appearances, forward_items);
     bool has_forward_extension = false;
     for(auto &entry : forward_items){
-        if(entry.second.first == appearances.first){
+        if(entry.second.second.size() == appearances.second.size()){
             has_forward_extension = true;
             break;
         }
     }
 
     // output current pattern if necessary
-    if(!has_backward_extension && !has_forward_extension){
+    if(!has_forward_extension){
         sequential_patterns.insert(make_pair(sequence, appearances.second));
 
 //        cout<<"<";
