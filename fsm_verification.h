@@ -15,13 +15,15 @@ public:
     map<vector<int>, map<vector<int>, vector<pair<double, double>>>> results;// <object_ids: <camera_path: time_intervals>>
 
     BIDE_Verifier(vector<Path> &SDB, int m, int k, int d, double eps):SDB(SDB){
-        this->m = m;
-        this->k = k;
-        this->d = d;
+        this->m = m; this->k = k; this->d = d;
         this->eps = eps;
+        p_camera_path = nullptr;
+        p_appearances = nullptr;
+        p_cluster_lst = nullptr;
+        p_inversions_lst = nullptr;
     }
 
-    void verify(map<vector<int>, vector<Appearance>> &sequences){
+    void verify(vector<pair<vector<int>, vector<Appearance>>> &sequences){
         if(!results.empty()) results.clear();
 
         for(auto &seq_entry : sequences){
@@ -232,7 +234,7 @@ private:
             }
             for(int ap_id : aids){
                 Appearance &appearance = p_appearances->at(ap_id);
-                double crt_time = SDB[appearance.sid].positions[appearance.pids[camera_ids.back()]].end_time;
+                double crt_time = SDB[appearance.sid].positions[appearance.pids[camera_ids.back()]].begin_time;
                 end_time = max(end_time, crt_time);
             }
             time_intervals.emplace_back(start_time, end_time);
