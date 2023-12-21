@@ -138,7 +138,7 @@ public:
         }
         // continue to check according to $out_links$
         for(int pos = out_links.size() - 1; pos >= 0; pos--){
-            deduplicate_single(idx2it[idcs[pos]]->second);
+            deduplicate_time(idx2it[idcs[pos]]->second);
             for(int super_pos : out_links[pos]){
                 deduplicate_twin(idx2it[idcs[super_pos]]->second, idx2it[idcs[pos]]->second);
             }
@@ -341,37 +341,8 @@ private:
         return counts >= m;
     }
 
-    void deduplicate_twin(map<vector<int>, vector<pair<double, double>>> &super_map, map<vector<int>, vector<pair<double, double>>> &child_map){
-        for(auto child_it = child_map.begin(); child_it != child_map.end();){
-            const vector<int> &path = child_it->first;
-            vector<pair<double, double>> &intervals = child_it->second;
-            for(auto &super_entry : super_map){
-                const vector<int> &super_path = super_entry.first;
-                if(super_path.size() < path.size()) continue;
-
-                if(is_subpath(path, super_path)){
-                    vector<pair<double, double>> &super_intervals = super_entry.second;
-                    for(auto it = intervals.begin(); it != intervals.end();){
-                        bool erase_flag = false;
-                        for(auto &super_interval : super_intervals){
-                            if(super_interval.first > it->first) break;
-                            if(super_interval.second >= it->second) {
-                                erase_flag = true;
-                                break;
-                            }
-                        }
-                        if(erase_flag) it = intervals.erase(it);
-                        else it++;
-                    }
-                    if(intervals.empty()) break;
-                }
-            }
-            if(intervals.empty()) child_it = child_map.erase(child_it);
-            else child_it++;
-        }
-    }
-
-    void deduplicate_single(map<vector<int>, vector<pair<double, double>>> &cameras_map){
+    // deduplication sub-function based on brute force
+    void deduplicate_bf(map<vector<int>, vector<pair<double, double>>> &cameras_map){
         for(auto it = cameras_map.begin(); it != cameras_map.end();){
             vector<pair<double, double>> &time_intervals = it->second;
             if(time_intervals.empty()) it = cameras_map.erase(it);
@@ -437,7 +408,114 @@ private:
         }
     }
 
-    bool is_subpath(const vector<int> &small_path, const vector<int>& large_path) {
+    // improved deduplication based on time intervals
+    void deduplicate_time(map<vector<int>, vector<pair<double, double>>> &cameras_map){
+        for(auto it = cameras_map.begin(); it != cameras_map.end();){
+            vector<pair<double, double>> &time_intervals = it->second;
+            if(time_intervals.empty()) it = cameras_map.erase(it);
+            else{
+                sort(time_intervals.begin(), time_intervals.end());
+                vector<pair<double, double>> new_intervals;
+                pair<double, double> pre_interval = time_intervals.front();
+                for(int time_idx = 1; time_idx < time_intervals.size(); time_idx++){
+                    pair<double, double> &interval = time_intervals[time_idx];
+                    if(interval.first == pre_interval.first) pre_interval.second = interval.second;
+                    else{
+                        if(interval.second > pre_interval.second){
+                            new_intervals.push_back(pre_interval);
+                            pre_interval = interval;
+                        }
+                    }
+                }
+                new_intervals.push_back(pre_interval);
+                it->second = new_intervals;
+                it++;
+            }
+        }
+
+        vector<vector<int>> paths;
+        for(auto &cameras_entry : cameras_map) paths.push_back(cameras_entry.first);
+        vector<pair<pair<double, double>, int>> interval_infos;
+        int entry_idx = 0;
+        for(auto &cameras_entry : cameras_map){
+            for(pair<double, double> &interval : cameras_entry.second)
+                interval_infos.emplace_back(interval, entry_idx);
+            entry_idx++;
+        }
+        sort(interval_infos.begin(), interval_infos.end(),
+             [](const pair<pair<double, double>, int> &info1, const pair<pair<double, double>, int> &info2){
+                 return info1.first < info2.first;
+        });
+
+        vector<bool> contain_flags(interval_infos.size(), false);
+        vector<vector<int>> child_pointers(interval_infos.size(), vector<int>());
+        for(int info_idx = 0; info_idx < interval_infos.size(); info_idx++){
+            if(contain_flags[info_idx]) continue;
+            const pair<double, double> &interval = interval_infos[info_idx].first;
+            for(int nxt_idx = info_idx + 1; nxt_idx < interval_infos.size(); nxt_idx++){
+                const pair<double, double> &nxt_interval = interval_infos[nxt_idx].first;
+                if(interval.first == nxt_interval.first){
+                    child_pointers[nxt_idx].push_back(info_idx);
+                    if(interval.second == nxt_interval.second) child_pointers[info_idx].push_back(nxt_idx);
+                }
+                else{
+                    if(interval.second >= nxt_interval.second) child_pointers[info_idx].push_back(nxt_idx);
+                    else break;
+                }
+            }
+
+            const vector<int> &path = paths[interval_infos[info_idx].second];
+            vector<int> &children = child_pointers[info_idx];
+            for(int child_idx : children){
+                if(contain_flags[child_idx]) continue;
+                const vector<int> &child_path = paths[interval_infos[child_idx].second];
+                if(is_subpath(child_path, path)) contain_flags[child_idx] = true;
+            }
+        }
+
+        cameras_map.clear();
+        for(int info_idx = 0; info_idx < interval_infos.size(); info_idx++){
+            if(contain_flags[info_idx]) continue;
+            const vector<int> &path = paths[interval_infos[info_idx].second];
+            auto it = cameras_map.find(path);
+            if(it == cameras_map.end())
+                cameras_map[path] = vector<pair<double, double>>{interval_infos[info_idx].first};
+            else
+                it->second.push_back(interval_infos[info_idx].first);
+        }
+    }
+
+    void deduplicate_twin(map<vector<int>, vector<pair<double, double>>> &super_map, map<vector<int>, vector<pair<double, double>>> &child_map){
+        for(auto child_it = child_map.begin(); child_it != child_map.end();){
+            const vector<int> &path = child_it->first;
+            vector<pair<double, double>> &intervals = child_it->second;
+            for(auto &super_entry : super_map){
+                const vector<int> &super_path = super_entry.first;
+                if(super_path.size() < path.size()) continue;
+
+                if(is_subpath(path, super_path)){
+                    vector<pair<double, double>> &super_intervals = super_entry.second;
+                    for(auto it = intervals.begin(); it != intervals.end();){
+                        bool erase_flag = false;
+                        for(auto &super_interval : super_intervals){
+                            if(super_interval.first > it->first) break;
+                            if(super_interval.second >= it->second) {
+                                erase_flag = true;
+                                break;
+                            }
+                        }
+                        if(erase_flag) it = intervals.erase(it);
+                        else it++;
+                    }
+                    if(intervals.empty()) break;
+                }
+            }
+            if(intervals.empty()) child_it = child_map.erase(child_it);
+            else child_it++;
+        }
+    }
+
+    bool is_subpath(const vector<int> &small_path, const vector<int> &large_path) {
         if(small_path.size() > large_path.size()) return false;
         int s_ptr = 0, l_ptr = 0;
         while(s_ptr < small_path.size() && l_ptr < large_path.size()) {

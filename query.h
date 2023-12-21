@@ -44,14 +44,20 @@ void Query::mine() {
     clock_t record_time = clock();
     BIDE_Verifier verifier(travel_paths, m, k, d, eps);
     verifier.verify(sequences);
-    cout<<"verify: "<<static_cast<double>(clock() - record_time) / CLOCKS_PER_SEC<<", ";
+    int numbers = 0;
+    for(auto &object_entry : verifier.results){
+        for(auto &path_entry : object_entry.second){
+            numbers += static_cast<int>(path_entry.second.size());
+        }
+    }
+    cout<<"verify: "<<static_cast<double>(clock() - record_time) / CLOCKS_PER_SEC<<"s("<<numbers<<"), ";
 
     record_time = clock();
     verifier.deduplicate();
     cout<<"deduplicate: "<<static_cast<double>(clock() - record_time) / CLOCKS_PER_SEC<<", ";
 
     map<vector<int>, map<vector<int>, vector<pair<double, double>>>> &results = verifier.results;
-    int numbers = 0;
+    numbers = 0;
     for(auto &object_entry : results){
         for(auto &path_entry : object_entry.second){
             numbers += static_cast<int>(path_entry.second.size());
