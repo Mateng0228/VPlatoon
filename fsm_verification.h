@@ -64,8 +64,7 @@ public:
                 if(!check_numbers(cluster, appearances)) continue;
 
                 vector<int> camera_ids{0};
-                set<pair<int, int>> excludes;
-                dfs_mine(cluster, camera_ids, excludes);
+                dfs_mine(cluster, camera_ids);
             }
         }
     }
@@ -155,53 +154,41 @@ private:
     vector<vector<pair<int, int>>> *p_cluster_lst;
     vector<vector<pair<int, pair<int, int>>>> *p_inversions_lst;
 
-    void dfs_mine(vector<int> &ap_ids, vector<int> &camera_ids, set<pair<int, int>> &ret_exclusion){
-        bool insert_flag = true;
-        set<pair<int, int>> check_exclusion;
-
+    void dfs_mine(vector<int> &ap_ids, vector<int> &camera_ids){
         int last_cid = camera_ids.back();
-        vector<pair<int, pair<int, int>>> &pre_inversions = p_inversions_lst->at(last_cid);
-        int camera_path_length = int(p_camera_path->size());
-        for(int nxt_cid = last_cid + 1; nxt_cid <= min(last_cid + d + 1, camera_path_length - 1); nxt_cid++){
-            vector<pair<int, int>> &nxt_clusters = p_cluster_lst->at(nxt_cid);
-            vector<pair<int, pair<int, int>>> &nxt_inversions = p_inversions_lst->at(nxt_cid);
-            int n_valid_ap = 0;
-            map<int, vector<int>> cluster2aps;
-            for(int ap_id : ap_ids){
-                if(nxt_inversions[ap_id].first - pre_inversions[ap_id].first > d + 1) continue;
-                n_valid_ap += 1;
-
-                pair<int, int> &cluster_range = nxt_inversions[ap_id].second;
-                if(cluster_range.first == -1) continue;
-                for(int cluster_id = cluster_range.first; cluster_id <= cluster_range.second; cluster_id++){
-                    auto itr = cluster2aps.find(cluster_id);
-                    if(itr == cluster2aps.end())
-                        cluster2aps.insert(make_pair(cluster_id, vector<int>{ap_id}));
-                    else
-                        itr->second.push_back(ap_id);
-                }
-            }
-            if(n_valid_ap < m) break;
-
-            for(auto &entry : cluster2aps){
-                if(entry.second.size() < m) continue;
-                if(check_exclusion.find(make_pair(nxt_cid, entry.first)) != check_exclusion.end()) continue;
-
-                vector<int> &new_ap_ids = entry.second;
-                vector<int> new_camera_ids = camera_ids;
-                new_camera_ids.push_back(nxt_cid);
-                if(new_ap_ids.size() == (nxt_clusters[entry.first].second - nxt_clusters[entry.first].first + 1))
-                    ret_exclusion.insert(make_pair(nxt_cid, entry.first));
-                if(new_ap_ids.size() == ap_ids.size())
-                    insert_flag = false;
-                dfs_mine(new_ap_ids, new_camera_ids, check_exclusion);
-            }
-
-        }
-        ret_exclusion.insert(check_exclusion.begin(), check_exclusion.end());
-        if(insert_flag && camera_ids.size() >= k){
+        if(last_cid == int(p_camera_path->size()) - 1 && camera_ids.size() >= k){
             add_result(ap_ids, camera_ids);
+            return;
         }
+
+        bool insert_flag = true;
+        int nxt_cid = last_cid + 1;
+        vector<pair<int, pair<int, int>>> &nxt_inversions = p_inversions_lst->at(nxt_cid);
+        map<int, vector<int>> cluster2aps;
+        for(int ap_id : ap_ids){
+            pair<int, int> &cluster_range = nxt_inversions[ap_id].second;
+            if(cluster_range.first == -1) continue;
+            for(int cluster_id = cluster_range.first; cluster_id <= cluster_range.second; cluster_id++){
+                auto itr = cluster2aps.find(cluster_id);
+                if(itr == cluster2aps.end())
+                    cluster2aps.insert(make_pair(cluster_id, vector<int>{ap_id}));
+                else
+                    itr->second.push_back(ap_id);
+            }
+        }
+
+        for(auto &entry : cluster2aps){
+            if(entry.second.size() < m) continue;
+
+            vector<int> &new_ap_ids = entry.second;
+            vector<int> new_camera_ids = camera_ids;
+            new_camera_ids.push_back(nxt_cid);
+
+            if(new_ap_ids.size() == ap_ids.size()) insert_flag = false;
+            dfs_mine(new_ap_ids, new_camera_ids);
+        }
+
+        if(insert_flag && camera_ids.size() >= k) add_result(ap_ids, camera_ids);
     }
 
     void add_result(vector<int> &ap_ids, vector<int> &camera_ids){
@@ -459,8 +446,8 @@ private:
                     if(interval.second == nxt_interval.second) child_pointers[info_idx].push_back(nxt_idx);
                 }
                 else{
+                    if(interval.second < nxt_interval.first) break;
                     if(interval.second >= nxt_interval.second) child_pointers[info_idx].push_back(nxt_idx);
-                    else break;
                 }
             }
 

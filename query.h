@@ -66,6 +66,7 @@ void Query::mine() {
     cout<<"numbers: "<<numbers<<",";
     cout<<"total time: "<<static_cast<double>(clock() - begin_time) / CLOCKS_PER_SEC<<endl;
 
+//    print_results(results);
 }
 
 void Query::print_results(map<vector<int>, map<vector<int>, vector<pair<double, double>>>> &results){
