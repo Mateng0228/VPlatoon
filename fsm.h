@@ -44,7 +44,7 @@ private:
             sequential_patterns.insert(make_pair(sequence, appearances.second));
 
 //        cout<<"<";
-//        for(int camera_id : sequence) cout<<camera_id<<",";
+//        for(int camera : sequence) cout<<camera<<",";
 //        cout<<">:"<<"(";
 //        for(Appearance &ap : appearances.second){
 //            cout<<"[#"<<ap.sid<<"#";
@@ -318,7 +318,7 @@ private:
             sequential_patterns.emplace_back(sequence, appearances.second);
 
 //            cout<<"<";
-//            for(int camera_id : sequence) cout<<camera_id<<",";
+//            for(int camera : sequence) cout<<camera<<",";
 //            cout<<">:"<<"(";
 //            for(Appearance &ap : appearances.second){
 //                cout<<"[#"<<ap.sid<<"#";
@@ -380,7 +380,7 @@ public:
     vector<pair<vector<int>, vector<Appearance>>>& frequent_sequential_mining(){
         if(!sequential_patterns.empty()) sequential_patterns.clear();
 
-        map<pair<int, int>, pair<int, vector<Appearance>>> stub_map; //<(camera_id,tcs_id), (frequent, n_appearance)>
+        map<pair<int, int>, pair<int, vector<Appearance>>> stub_map; //<(camera,tcs_id), (frequent, n_appearance)>
         for(TCS_Path &path : tcs_paths){
             set<pair<int, int>> marks;
             for(int idx = 0; idx < path.positions.size(); idx++){

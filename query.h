@@ -13,7 +13,7 @@ private:
     vector<Path> travel_paths;
 
     void print_results(map<vector<int>, map<vector<int>, vector<pair<double, double>>>> &results);
-    void dump_results(map<vector<int>, map<vector<int>, vector<pair<double, double>>>> &results);
+    void dump_results(map<vector<int>, map<vector<int>, vector<pair<double, double>>>> &results, string file_name);
 public:
     string dataset;
     int m, k, d;
@@ -26,10 +26,10 @@ public:
 
         get_paths("datasets/" + this->dataset, travel_paths);
     }
-    void mine();
+    void mine_baseline();
 };
 
-void Query::mine() {
+void Query::mine_baseline() {
     cout<<"("<<m<<","<<k<<","<<d<<","<<eps<<") ";
     clock_t begin_time = clock();
 
@@ -67,6 +67,7 @@ void Query::mine() {
     cout<<"total time: "<<static_cast<double>(clock() - begin_time) / CLOCKS_PER_SEC<<endl;
 
 //    print_results(results);
+    dump_results(results, "results/test0.txt");
 }
 
 void Query::print_results(map<vector<int>, map<vector<int>, vector<pair<double, double>>>> &results){
@@ -93,9 +94,9 @@ void Query::print_results(map<vector<int>, map<vector<int>, vector<pair<double, 
     }
 }
 
-void Query::dump_results(map<vector<int>, map<vector<int>, vector<pair<double, double>>>> &results){
+void Query::dump_results(map<vector<int>, map<vector<int>, vector<pair<double, double>>>> &results, string file_name){
     ofstream ofs;
-    ofs.open("test.txt", ios::out);
+    ofs.open(file_name, ios::out);
     ofs<<"Objects,Path"<<endl;
     for(auto &object_entry : results){
         auto &object_ids = object_entry.first;

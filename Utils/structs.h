@@ -2,16 +2,16 @@
 #define BASELINE_STRUCTS_H
 
 #include <string>
-#include <utility>
 #include <vector>
 
 using namespace std;
+typedef long long ll;
 
 // Basic position units in Travel-Path
 struct Position{
-    int camera_id;
+    ll camera_id;
     double begin_time, end_time;
-    Position(int camera_id, double begin_time, double end_time){
+    Position(ll camera_id, double begin_time, double end_time){
         this->camera_id = camera_id;
         this->begin_time = begin_time; this->end_time = end_time;
     }
