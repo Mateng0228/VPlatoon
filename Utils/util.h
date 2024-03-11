@@ -3,6 +3,7 @@
 
 #include <dirent.h>
 #include <fstream>
+#include <cstring>
 #include <set>
 #include <map>
 #include "structs.h"

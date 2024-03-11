@@ -67,7 +67,7 @@ void Query::mine_baseline() {
     cout<<"total time: "<<static_cast<double>(clock() - begin_time) / CLOCKS_PER_SEC<<endl;
 
 //    print_results(results);
-    dump_results(results, "results/test0.txt");
+//    dump_results(results, "results/test0.txt");
 }
 
 void Query::print_results(map<vector<int>, map<vector<int>, vector<pair<double, double>>>> &results){

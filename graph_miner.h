@@ -52,6 +52,7 @@ public:
     GraphMiner(vector<Path> &paths, int m, int k, int d, double eps);
     void run();
     void deduplicate();
+    void print_results();
     void dump_results(string file_name);
 };
 

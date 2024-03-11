@@ -5,6 +5,7 @@
 #include <iostream>
 #include <unordered_set>
 #include <unordered_map>
+#include<climits>
 #include <fstream>
 #include "graph_miner.h"
 
@@ -224,6 +225,7 @@ struct GraphMiner::ExpandTuple{
     ObjectMap obj_map;
 };
 void GraphMiner::expand(vector<int> &cluster_route, ObjectMap &obj_map){
+//    int pre_order = clusters[cluster_route.back()].order;
     map<int, ExpandTuple> expand_map;
     for(auto &obj_entry : obj_map){
         const ObjectInfo &begin_obj = obj_entry.first;
@@ -242,6 +244,8 @@ void GraphMiner::expand(vector<int> &cluster_route, ObjectMap &obj_map){
 
                     ObjectInfo nxt_obj(oid, nxt_pid, travel_path[nxt_tpid].begin_time, travel_path[nxt_tpid].end_time);
                     for(int cluster_id : cluster_path[nxt_pid].second){
+//                        if(clusters[cluster_id].order > pre_order && clusters[cluster_id].skip) continue;
+
                         ExpandTuple *p_tuple = nullptr;
                         auto expand_it = expand_map.find(cluster_id);
                         if(expand_it == expand_map.end()) p_tuple = &(expand_map[cluster_id] = ExpandTuple());
@@ -265,6 +269,8 @@ void GraphMiner::expand(vector<int> &cluster_route, ObjectMap &obj_map){
 
                     ObjectInfo nxt_obj(oid, nxt_pid, travel_path[nxt_tpid].begin_time, travel_path[nxt_tpid].end_time);
                     for(int cluster_id : cluster_path[nxt_pid].second){
+//                        if(clusters[cluster_id].order > pre_order && clusters[cluster_id].skip) continue;
+
                         ExpandTuple *p_tuple = nullptr;
                         auto expand_it = expand_map.find(cluster_id);
                         if(expand_it == expand_map.end()) p_tuple = &(expand_map[cluster_id] = ExpandTuple());
@@ -559,6 +565,30 @@ void GraphMiner::deduplicate(){
     for(auto result_it = results.begin(); result_it != results.end();){
         if(result_it->second.empty()) result_it = results.erase(result_it);
         else result_it++;
+    }
+}
+
+void GraphMiner::print_results(){
+    for(auto &object_entry : results){
+        auto &object_ids = object_entry.first;
+        cout<<"{";
+        for(const int &object_id : object_ids){
+            cout<<travel_paths[object_id].object_name;
+            if(&object_id != &object_ids.back()) cout<<",";
+        }
+        cout<<"}:[";
+        for(auto &path_entry : object_entry.second){
+            for(const ll &camera : path_entry.first){
+                cout<<camera;
+                if(&camera != &path_entry.first.back()) cout<<"-";
+            }
+            cout<<"(";
+            for(auto &p : path_entry.second){
+                cout<<"<"<<p.first<<":"<<p.second<<">,";
+            }
+            cout<<"), ";
+        }
+        cout<<"]"<<endl;
     }
 }
 
