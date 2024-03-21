@@ -36,4 +36,22 @@ struct TCS_Path : Path{
     }
 };
 
+class Hasher{
+public:
+    size_t operator()(const tuple<long long, int, int> &key) const {
+        return fast_hash(key);
+    }
+private:
+    // based on Thomas Wang algorithm
+    static size_t fast_hash(const tuple<long long, int, int> &key) {
+        long long a = get<0>(key);
+        int b = get<1>(key);
+        int c = get<2>(key);
+
+        return static_cast<size_t>(a) * 2654435761U +
+               static_cast<size_t>(b) * 2654435789U +
+               static_cast<size_t>(c) * 2654435809U;
+    }
+};
+
 #endif //BASELINE_STRUCTS_H

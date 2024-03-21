@@ -26,10 +26,10 @@ private:
     vector<Path> &SDB;
     int threshold;
     int max_gap;
-    map<vector<int>, vector<Appearance>> sequential_patterns;
+    map<vector<ll>, vector<Appearance>> sequential_patterns;
 
-    void pattern_growth(vector<int> &sequence, pair<int, vector<Appearance>> &appearances){
-        map<int, pair<int, vector<Appearance>>> forward_items;
+    void pattern_growth(vector<ll> &sequence, pair<int, vector<Appearance>> &appearances){
+        map<ll, pair<int, vector<Appearance>>> forward_items;
         forward_check(appearances, forward_items);
         bool has_forward_extension = false;
         for(auto &entry : forward_items){
@@ -38,45 +38,31 @@ private:
                 break;
             }
         }
-
         // output current pattern if necessary
-        if(!has_forward_extension){
-            sequential_patterns.insert(make_pair(sequence, appearances.second));
-
-//        cout<<"<";
-//        for(int camera : sequence) cout<<camera<<",";
-//        cout<<">:"<<"(";
-//        for(Appearance &ap : appearances.second){
-//            cout<<"[#"<<ap.sid<<"#";
-//            for(int pos : ap.pids) cout<<pos<<",";
-//            cout<<"] ";
-//        }
-//        cout<<")"<<endl;
-        }
-
+        if(!has_forward_extension) sequential_patterns[sequence] = appearances.second;
         // pattern growth
         for(auto &entry : forward_items){
             if(entry.second.first >= threshold){
-                vector<int> attached_sequence(sequence);
+                vector<ll> attached_sequence(sequence);
                 attached_sequence.push_back(entry.first);
                 pattern_growth(attached_sequence, entry.second);
             }
         }
     }
 
-    void forward_check(pair<int, vector<Appearance>> &appearances, map<int, pair<int, vector<Appearance>>> &item_map){
+    void forward_check(pair<int, vector<Appearance>> &appearances, map<ll, pair<int, vector<Appearance>>> &item_map){
         Path *crt_path = nullptr;
-        unordered_set<int> cameras;
+        unordered_set<ll> cameras;
         for(const Appearance &appearance : appearances.second){
             if(crt_path == nullptr) crt_path = &SDB[appearance.sid];
             else if(crt_path != &SDB[appearance.sid]){
                 crt_path = &SDB[appearance.sid];
-                for(int camera_id : cameras) item_map.find(camera_id)->second.first += 1;
+                for(ll camera_id : cameras) item_map.find(camera_id)->second.first += 1;
                 cameras.clear();
             }
-            int path_length = crt_path->positions.size();
-            for(int pos_id = appearance.end_id + 1; pos_id <= min(appearance.end_id + 1 + max_gap, path_length - 1); pos_id++){
-                int camera_id = crt_path->positions[pos_id].camera_id;
+            int path_length = static_cast<int>(crt_path->positions.size());
+            for(int pos_id = appearance.end_id + 1; pos_id <= min(appearance.end_id + 1 + max_gap, path_length - 1); ++pos_id){
+                ll camera_id = crt_path->positions[pos_id].camera_id;
                 cameras.insert(camera_id);
                 Appearance new_appearance(crt_path->object_id, appearance.begin_id, pos_id);
                 new_appearance.pids = appearance.pids;
@@ -89,12 +75,10 @@ private:
                             make_pair(0, vector<Appearance>{new_appearance})
                     ));
                 }
-                else{
-                    itr->second.second.push_back(new_appearance);
-                }
+                else itr->second.second.push_back(new_appearance);
             }
         }
-        for(int camera_id : cameras) item_map.find(camera_id)->second.first += 1;
+        for(ll camera_id : cameras) item_map.find(camera_id)->second.first += 1;
     }
 
 public:
@@ -103,14 +87,14 @@ public:
         this->max_gap = max_gap;
     }
 
-    map<vector<int>, vector<Appearance>>& frequent_sequential_mining(){
+    map<vector<ll>, vector<Appearance>>& frequent_sequential_mining(){
         if(!sequential_patterns.empty()) sequential_patterns.clear();
 
-        map<int, pair<int, vector<Appearance>>> stub_map;
+        map<ll, pair<int, vector<Appearance>>> stub_map;
         for(Path &path : SDB){
-            unordered_set<int> cameras;
-            for(int pos_id = 0; pos_id < path.positions.size(); pos_id++){
-                int camera_id = path.positions[pos_id].camera_id;
+            unordered_set<ll> cameras;
+            for(int pos_id = 0; pos_id < path.positions.size(); ++pos_id){
+                ll camera_id = path.positions[pos_id].camera_id;
                 cameras.insert(camera_id);
                 Appearance new_appearance(path.object_id, pos_id, pos_id);
                 new_appearance.pids.push_back(pos_id);
@@ -122,15 +106,13 @@ public:
                             make_pair(0, vector<Appearance>{new_appearance})
                     ));
                 }
-                else{
-                    itr->second.second.push_back(new_appearance);
-                }
+                else itr->second.second.push_back(new_appearance);
             }
-            for(int camera_id : cameras) stub_map.find(camera_id)->second.first += 1;
+            for(ll camera_id : cameras) stub_map.find(camera_id)->second.first += 1;
         }
         for(auto &entry : stub_map){
             if(entry.second.first >= threshold){
-                vector<int> sequence{entry.first};
+                vector<ll> sequence{entry.first};
                 pattern_growth(sequence, entry.second);
             }
         }
@@ -155,18 +137,18 @@ private:
     int k;
     int max_gap;
     double eps;
-    vector<pair<vector<int>, vector<Appearance>>> sequential_patterns;
+    vector<pair<vector<ll>, vector<Appearance>>> sequential_patterns;
 
     void init_tcs(){
-        map<int, vector<object_info>> camera2objects;
+        map<ll, vector<object_info>> camera2objects;
         for(int oid = 0; oid < SDB.size(); oid++){
             Path &path = SDB[oid];
             for(int pid = 0; pid < path.positions.size(); pid++){
                 Position &p = path.positions[pid];
-                int camera = p.camera_id;
+                ll camera = p.camera_id;
                 auto it = camera2objects.find(camera);
                 if(it == camera2objects.end())
-                    camera2objects[camera] = vector<object_info>{object_info(oid, pid, p.begin_time, p.end_time)};
+                    camera2objects[camera] = {object_info(oid, pid, p.begin_time, p.end_time)};
                 else
                     it->second.emplace_back(oid, pid, p.begin_time, p.end_time);
             }
@@ -176,7 +158,7 @@ private:
         for(Path &path : SDB) tcs_matrix.emplace_back(path.positions.size(), -1);
         // fill the $tcs_matrix$
         for(auto &camera_entry : camera2objects){
-            int camera = camera_entry.first;
+            ll camera = camera_entry.first;
             vector<object_info> &infos = camera_entry.second;
             vector<pair<int, int>> clusters, meta_clusters;
             temporal_cluster(infos, clusters, meta_clusters);
@@ -300,8 +282,8 @@ private:
         else if(pre_right != -1) meta_clusters.emplace_back(meta_left, meta_right);
     }
 
-    void pattern_growth(vector<pair<int, int>> &mark_seq, pair<int, vector<Appearance>> &appearances){
-        map<pair<int, int>, pair<int, vector<Appearance>>> forward_items;
+    void pattern_growth(vector<pair<ll, int>> &mark_seq, pair<int, vector<Appearance>> &appearances){
+        map<pair<ll, int>, pair<int, vector<Appearance>>> forward_items;
         forward_check(appearances, forward_items);
         bool has_forward_extension = false;
         for(auto &entry : forward_items){
@@ -310,37 +292,25 @@ private:
                 break;
             }
         }
-
         // output current pattern if necessary
         if(!has_forward_extension && mark_seq.size() >= k){
-            vector<int> sequence;
+            vector<ll> sequence;
             for(auto &mark : mark_seq) sequence.push_back(mark.first);
             sequential_patterns.emplace_back(sequence, appearances.second);
-
-//            cout<<"<";
-//            for(int camera : sequence) cout<<camera<<",";
-//            cout<<">:"<<"(";
-//            for(Appearance &ap : appearances.second){
-//                cout<<"[#"<<ap.sid<<"#";
-//                for(int pos : ap.pids) cout<<pos<<",";
-//                cout<<"] ";
-//            }
-//            cout<<")"<<endl;
         }
-
         // pattern growth
         for(auto &entry : forward_items){
             if(entry.second.first >= threshold){
-                vector<pair<int, int>> attached_seq(mark_seq);
+                vector<pair<ll, int>> attached_seq(mark_seq);
                 attached_seq.push_back(entry.first);
                 pattern_growth(attached_seq, entry.second);
             }
         }
     }
 
-    void forward_check(pair<int, vector<Appearance>> &appearances, map<pair<int, int>, pair<int, vector<Appearance>>> &item_map){
+    void forward_check(pair<int, vector<Appearance>> &appearances, map<pair<ll, int>, pair<int, vector<Appearance>>> &item_map){
         TCS_Path *crt_path = nullptr;
-        set<pair<int, int>> marks;
+        set<pair<ll, int>> marks;
         for(const Appearance &appearance : appearances.second){
             if(crt_path == nullptr) crt_path = &tcs_paths[appearance.sid];
             else if(crt_path != &tcs_paths[appearance.sid]){
@@ -354,9 +324,9 @@ private:
                 int crt_pid = crt_path->offsets[idx];
                 if(crt_pid - base_pid - 1 > max_gap) break;
 
-                int camera_id = crt_path->positions[idx].camera_id;
+                ll camera_id = crt_path->positions[idx].camera_id;
                 int meta_id = crt_path->tcs_ids[idx];
-                pair<int, int> mark(camera_id, meta_id);
+                pair<ll, int> mark(camera_id, meta_id);
                 marks.insert(mark);
                 Appearance new_appearance(crt_path->object_id, appearance.begin_id, idx);
                 new_appearance.pids = appearance.pids;
@@ -377,18 +347,18 @@ private:
 public:
     vector<TCS_Path> tcs_paths;
 
-    vector<pair<vector<int>, vector<Appearance>>>& frequent_sequential_mining(){
+    vector<pair<vector<ll>, vector<Appearance>>>& frequent_sequential_mining(){
         if(!sequential_patterns.empty()) sequential_patterns.clear();
 
-        map<pair<int, int>, pair<int, vector<Appearance>>> stub_map; //<(camera,tcs_id), (frequent, n_appearance)>
+        map<pair<ll, int>, pair<int, vector<Appearance>>> stub_map; //<(camera,tcs_id), (frequent, appearances)>
         for(TCS_Path &path : tcs_paths){
-            set<pair<int, int>> marks;
+            set<pair<ll, int>> marks;
             for(int idx = 0; idx < path.positions.size(); idx++){
-                int camera_id = path.positions[idx].camera_id;
+                ll camera_id = path.positions[idx].camera_id;
                 int meta_id = path.tcs_ids[idx];
                 int pos_id = path.offsets[idx];
 
-                pair<int, int> mark(camera_id, meta_id);
+                pair<ll, int> mark(camera_id, meta_id);
                 marks.insert(mark);
                 Appearance new_appearance(path.object_id, idx, idx);
                 new_appearance.pids.push_back(pos_id);
@@ -406,7 +376,7 @@ public:
         }
         for(auto &entry : stub_map){
             if(entry.second.first >= threshold){
-                vector<pair<int, int>> mark_seq{entry.first};
+                vector<pair<ll, int>> mark_seq{entry.first};
                 pattern_growth(mark_seq, entry.second);
             }
         }

@@ -71,14 +71,14 @@ GraphMiner::GraphMiner(vector<Path> &paths, int m, int k, int d, double eps) : t
     this->eps = eps;
 }
 
-void GraphMiner::temporal_cluster(vector<ObjectInfo> &infos, vector<pair<int, int>> &cluster_ranges) const{
+void GraphMiner::temporal_cluster(vector<ObjectInfo> &infos, vector<pair<int, int>> &cluster_ranges){
     if(infos.empty()) return;
-
+    // sort object's position (represented by ObjectInfo)
     sort(infos.begin(), infos.end(),[](const ObjectInfo& info1, const ObjectInfo& info2){
         if(info1.begin_time == info2.begin_time) return info1.end_time < info2.end_time;
         return info1.begin_time < info2.begin_time;
     });
-
+    // cluster
     int left = 0, right = 0;
     double border = infos.front().begin_time + eps;
     while(right != infos.size() - 1){
@@ -86,7 +86,7 @@ void GraphMiner::temporal_cluster(vector<ObjectInfo> &infos, vector<pair<int, in
         double next_time = infos[next_idx].begin_time;
         if(next_time <= border) right++;
         else{
-            if(right - left + 1 >= m) cluster_ranges.emplace_back(left, right);
+            if(check_m(infos, left, right)) cluster_ranges.emplace_back(left, right);
             left++;
             while(left != next_idx){
                 double temp_border = infos[left].begin_time + eps;
@@ -97,10 +97,71 @@ void GraphMiner::temporal_cluster(vector<ObjectInfo> &infos, vector<pair<int, in
             right++;
         }
     }
-    if(right - left + 1 >= m) cluster_ranges.emplace_back(left, right);
+    if(check_m(infos, left, right)) cluster_ranges.emplace_back(left, right);
 }
 
-void GraphMiner::init_clusters(){
+void GraphMiner::local_cluster(ll camera, vector<pair<ObjectInfo, ObjectInfo>> &infos, vector<ConditionalCluster> &cdt_clusters){
+    if(infos.empty()) return;
+    // sort current object's position
+    sort(infos.begin(), infos.end(), [](const pair<ObjectInfo, ObjectInfo> &p1, const pair<ObjectInfo, ObjectInfo> &p2){
+        const ObjectInfo &info1 = p1.second, &info2 = p2.second;
+        if(info1.begin_time == info2.begin_time) return info1.end_time < info2.end_time;
+        return info1.begin_time < info2.begin_time;
+    });
+    // cluster
+    double border = infos.front().second.begin_time + eps;
+    int left = 0, right = 0, n_distinct = 1;
+    while(right != infos.size() - 1){
+        int next_idx = right + 1;
+        double next_time = infos[next_idx].second.begin_time;
+        if(next_time <= border){
+            if(infos[next_idx].second != infos[right].second) n_distinct += 1;
+            right++;
+        }
+        else{
+            if(check_m(infos, left, right)){
+                // construct corresponding conditional cluster
+                ObjectMap mp;
+                for(int idx = left; idx <= right; ++idx){
+                    ObjectInfo &begin_info = infos[idx].first, &end_info = infos[idx].second;
+                    auto mp_itr = mp.find(begin_info);
+                    if(mp_itr == mp.end()) mp[begin_info] = {end_info};
+                    else mp_itr->second.insert(end_info);
+                }
+                ObjectInfo &min_info = infos[left].second, &max_info = infos[right].second;
+                int min_order = simplified_paths[min_info.object_id][min_info.pid].second;
+                int max_order = simplified_paths[max_info.object_id][max_info.pid].second;
+                tuple<ll, int, int> key(camera, min_order, max_order);
+                cdt_clusters.emplace_back(mp, key, n_distinct);
+            }
+            ++right; ++n_distinct;
+            if(infos[left].second != infos[left + 1].second) --n_distinct;
+            while(++left != next_idx){
+                double temp_border = infos[left].second.begin_time + eps;
+                if(next_time <= temp_border) break;
+                if(infos[left].second != infos[left + 1].second) --n_distinct;
+            }
+            border = infos[left].second.begin_time + eps;
+        }
+    }
+    if(check_m(infos, left, right)){
+        // construct corresponding conditional cluster
+        ObjectMap mp;
+        for(int idx = left; idx <= right; ++idx){
+            ObjectInfo &begin_info = infos[idx].first, &end_info = infos[idx].second;
+            auto mp_itr = mp.find(begin_info);
+            if(mp_itr == mp.end()) mp[begin_info] = {end_info};
+            else mp_itr->second.insert(end_info);
+        }
+        ObjectInfo &min_info = infos[left].second, &max_info = infos[right].second;
+        int min_order = simplified_paths[min_info.object_id][min_info.pid].second;
+        int max_order = simplified_paths[max_info.object_id][max_info.pid].second;
+        tuple<ll, int, int> key(camera, min_order, max_order);
+        cdt_clusters.emplace_back(mp, key, n_distinct);
+    }
+}
+
+void GraphMiner::init_clusters(vector<vector<pair<int, ClusterIds>>> &cluster_paths){
     // do temporal clustering for each camera
     map<ll, vector<ObjectInfo>> camera2objects;
     for(int oid = 0; oid < travel_paths.size(); oid++){
@@ -115,57 +176,77 @@ void GraphMiner::init_clusters(){
                 it->second.emplace_back(oid, pid, p.begin_time, p.end_time);
         }
     }
-    // construct cluster paths
+    // get complete $simplified_paths$ and local variable $cluster_paths$
     for(Path &path : travel_paths){
+        simplified_paths.emplace_back(path.positions.size(), make_pair(-1, -1));
         cluster_paths.emplace_back(path.positions.size(), make_pair(-1, ClusterIds()));
     }
-
     int n_clusters = 0;
     for(auto &camera_entry : camera2objects){
         ll camera = camera_entry.first;
         vector<ObjectInfo> &infos = camera_entry.second;
         vector<pair<int, int>> cluster_ranges;
         temporal_cluster(infos, cluster_ranges);
+        // fill up $simplified_paths$ and part of $cluster_paths$
+        for(int info_order = 0; info_order < infos.size(); ++info_order){
+            ObjectInfo &info = infos[info_order];
 
+            pair<int, int> &p = simplified_paths[info.object_id][info.pid];
+            p.first = info.pid;
+            p.second = info_order;
+
+            cluster_paths[info.object_id][info.pid].first = info.pid;
+        }
+        // fill up cluster-related data structure
         for(pair<int, int> &cluster_range : cluster_ranges){
-            clusters.emplace_back(n_clusters, camera);
-            for(int info_idx = cluster_range.first; info_idx <= cluster_range.second; info_idx++){
+            int min_order = cluster_range.first, max_order = cluster_range.second;
+            tuple<ll, int, int> key(camera, min_order, max_order);
+            clusters.emplace_back(n_clusters, key);
+            key2cid[key] = n_clusters;
+
+            for(int info_idx = min_order; info_idx <= max_order; ++info_idx){
                 ObjectInfo &info = infos[info_idx];
                 cluster_paths[info.object_id][info.pid].second.push_back(n_clusters);
             }
             n_clusters++;
         }
     }
+    // simplify $simplified_paths$ and $cluster_paths$
+    for(int path_idx = 0; path_idx < simplified_paths.size(); ++path_idx){
+        vector<pair<int, int>> &sp_path = simplified_paths[path_idx];
+        vector<pair<int, ClusterIds>> &cluster_path = cluster_paths[path_idx];
 
-    for(vector<pair<int, ClusterIds>> &cluster_path : cluster_paths){
         int counts = 0;
-        for(int pid = 0; pid < cluster_path.size(); pid++){
-            ClusterIds &ids = cluster_path[pid].second;
-            if(ids.empty()) continue;
-            if(counts == pid) cluster_path[counts].first = pid;
-            else cluster_path[counts] = make_pair(pid, ids);
-            counts++;
+        for(int pid = 0; pid < sp_path.size(); ++pid){
+            ClusterIds &cids = cluster_path[pid].second;
+            if(cids.empty()) continue;
+            if(counts != pid){
+                sp_path[counts] = sp_path[pid];
+                cluster_path[counts] = cluster_path[pid];
+            }
+            ++counts;
         }
+
+        sp_path.resize(counts);
         cluster_path.resize(counts);
     }
     // fill the parameter $member$ in each cluster
-    for(int oid = 0; oid < cluster_paths.size(); oid++){
+    for(int oid = 0; oid < cluster_paths.size(); ++oid){
         vector<Position> &travel_path = travel_paths[oid].positions;
         vector<pair<int, ClusterIds>> &cluster_path = cluster_paths[oid];
-        for(int c_pid = 0; c_pid < cluster_path.size(); c_pid++){
+        for(int c_pid = 0; c_pid < cluster_path.size(); ++c_pid){
             int travel_pid = cluster_path[c_pid].first;
             Position &position = travel_path[travel_pid];
-            for(int cluster_id : cluster_path[c_pid].second){
+            for(int cluster_id : cluster_path[c_pid].second)
                 clusters[cluster_id].members.emplace_back(oid, c_pid, position.begin_time, position.end_time);
-            }
         }
     }
-
 }
 
-void GraphMiner::compute_order() {
+void GraphMiner::compute_order(){
     // initialize cluster-related data structures
-    init_clusters();
+    vector<vector<pair<int, ClusterIds>>> cluster_paths;
+    init_clusters(cluster_paths);
     // construct cluster graph according to cluster paths
     vector<set<int>> adj_sets(clusters.size(), set<int>());
     for(vector<pair<int, ClusterIds>> &cluster_path : cluster_paths){
@@ -219,106 +300,70 @@ void GraphMiner::compute_intervals(map<int, Intervals> &o2Is, map<int, Intervals
     }
 }
 
-struct GraphMiner::ExpandTuple{
-    set<int> crt_oids; // distinct object_ids in current cluster
-    int num_maximals = 0; // number of ObjectInfos > all previous ObjectInfos from the same ObjectInfo in first cluster
-    ObjectMap obj_map;
-};
-void GraphMiner::expand(vector<int> &cluster_route, ObjectMap &obj_map){
-//    int pre_order = clusters[cluster_route.back()].order;
-    map<int, ExpandTuple> expand_map;
+void GraphMiner::expand(vector<ll> &camera_route, ObjectMap &obj_map){
+    map<ll, vector<pair<ObjectInfo, ObjectInfo>>> camera2infos;
     for(auto &obj_entry : obj_map){
-        const ObjectInfo &begin_obj = obj_entry.first;
-        set<ObjectInfo> &end_objs = obj_entry.second;
+        const ObjectInfo &begin_info = obj_entry.first;
+        set<ObjectInfo> &end_infos = obj_entry.second;
 
-        int oid = begin_obj.object_id;
+        int oid = begin_info.object_id;
         auto &travel_path = travel_paths[oid].positions;
-        auto &cluster_path = cluster_paths[oid];
-        int border = static_cast<int>(cluster_path.size()) - 1;
-        for(auto it = end_objs.begin(); it != end_objs.end(); ++it){
-            int base_tpid = cluster_path[it->pid].first; // tpid means "position id in travel path"
-            if(it == end_objs.begin()){
-                for(int nxt_pid = it->pid + 1; nxt_pid <= border; ++nxt_pid){
-                    int nxt_tpid = cluster_path[nxt_pid].first;
-                    if(nxt_tpid - base_tpid - 1 > d) break;
+        auto &sp_path = simplified_paths[oid];
+        int border = static_cast<int>(sp_path.size()) - 1;
+        for(const ObjectInfo &end_info : end_infos){
+            int base_spid = end_info.pid, base_tpid = sp_path[base_spid].first;
+            for(int nxt_spid = base_spid + 1; nxt_spid <= border; ++nxt_spid){
+                int nxt_tpid = sp_path[nxt_spid].first;
+                if(nxt_tpid - base_tpid - 1 > d) break;
 
-                    ObjectInfo nxt_obj(oid, nxt_pid, travel_path[nxt_tpid].begin_time, travel_path[nxt_tpid].end_time);
-                    for(int cluster_id : cluster_path[nxt_pid].second){
-//                        if(clusters[cluster_id].order > pre_order && clusters[cluster_id].skip) continue;
-
-                        ExpandTuple *p_tuple = nullptr;
-                        auto expand_it = expand_map.find(cluster_id);
-                        if(expand_it == expand_map.end()) p_tuple = &(expand_map[cluster_id] = ExpandTuple());
-                        else p_tuple = &(expand_it->second);
-
-                        auto obj_it = p_tuple->obj_map.find(begin_obj);
-                        if(obj_it == p_tuple->obj_map.end()){
-                            p_tuple->crt_oids.insert(oid);
-                            p_tuple->num_maximals += 1;
-                            p_tuple->obj_map[begin_obj] = set<ObjectInfo>{nxt_obj};
-                        }
-                        else obj_it->second.insert(nxt_obj);
-                    }
-                }
-                border = it->pid;
+                ll nxt_camera = travel_path[nxt_tpid].camera_id;
+                ObjectInfo nxt_info(oid, nxt_spid, travel_path[nxt_tpid].begin_time, travel_path[nxt_tpid].end_time);
+                auto itr = camera2infos.find(nxt_camera);
+                if(itr == camera2infos.end()) camera2infos[nxt_camera] = {{begin_info, nxt_info}};
+                else itr->second.emplace_back(begin_info, nxt_info);
             }
-            else{
-                for(int nxt_pid = it->pid + 1; nxt_pid <= border; ++nxt_pid){
-                    int nxt_tpid = cluster_path[nxt_pid].first;
-                    if(nxt_tpid - base_tpid - 1 > d) break;
-
-                    ObjectInfo nxt_obj(oid, nxt_pid, travel_path[nxt_tpid].begin_time, travel_path[nxt_tpid].end_time);
-                    for(int cluster_id : cluster_path[nxt_pid].second){
-//                        if(clusters[cluster_id].order > pre_order && clusters[cluster_id].skip) continue;
-
-                        ExpandTuple *p_tuple = nullptr;
-                        auto expand_it = expand_map.find(cluster_id);
-                        if(expand_it == expand_map.end()) p_tuple = &(expand_map[cluster_id] = ExpandTuple());
-                        else p_tuple = &(expand_it->second);
-
-                        auto obj_it = p_tuple->obj_map.find(begin_obj);
-                        if(obj_it == p_tuple->obj_map.end()){
-                            p_tuple->crt_oids.insert(oid);
-                            p_tuple->obj_map[begin_obj] = set<ObjectInfo>{nxt_obj};
-                        }
-                        else obj_it->second.insert(nxt_obj);
-                    }
-                }
-            }
-
+            border = base_spid;
         }
     }
 
-    // traverse $expand_map$ in $cluster.order$ order to determine next clusters for expansion
     bool is_dominated = false; // whether the current pattern is dominated
-    int num_begin_objs = static_cast<int>(obj_map.size());
+    for(auto &info_entry : camera2infos){
+        ll camera = info_entry.first;
+        vector<pair<ObjectInfo, ObjectInfo>> &infos = info_entry.second;
+        if(infos.size() < m) continue;
 
-    vector<pair<const int, ExpandTuple>*> entry_pointers;
-    for(auto &entry : expand_map) entry_pointers.push_back(&entry);
-    sort(entry_pointers.begin(), entry_pointers.end(),
-         [this](pair<const int, ExpandTuple>* p1, pair<const int, ExpandTuple>* p2){
-             return clusters[p1->first].order < clusters[p2->first].order;
-    });
-    for(auto entry_pointer : entry_pointers){
-        int cluster_id = entry_pointer->first;
-        ExpandTuple &tuple = entry_pointer->second;
-        if(tuple.crt_oids.size() < m) continue;
-
-        if(tuple.num_maximals == num_begin_objs) is_dominated = true;
-        if(!clusters[cluster_id].skip){
-            set<ObjectInfo> crt_members;
-            for(auto &entry : tuple.obj_map){
-                set<ObjectInfo> &partial_members = entry.second;
-                crt_members.insert(partial_members.begin(), partial_members.end());
+        vector<ConditionalCluster> cdt_clusters;
+        local_cluster(camera, infos, cdt_clusters);
+        for(ConditionalCluster &cdt_cluster : cdt_clusters){
+            auto &key = cdt_cluster.key;
+            auto itr = key2cid.find(key);
+            if(itr != key2cid.end()){
+                int n_member = get<2>(key) - get<1>(key) + 1;
+                if(cdt_cluster.n_ends == n_member) clusters[itr->second].skip = true;
             }
-            clusters[cluster_id].skip = (crt_members.size() == clusters[cluster_id].members.size());
+
+            ObjectMap &nxt_map = cdt_cluster.members;
+            if(!is_dominated && nxt_map.size() == obj_map.size()){
+                bool flag = true;
+                auto nxt_it = nxt_map.begin(), crt_it = obj_map.begin();
+                while(nxt_it != nxt_map.end()){
+                    if(*(nxt_it->second.begin()) <= *(crt_it->second.begin())){
+                        flag = false;
+                        break;
+                    }
+                    ++nxt_it;
+                    ++crt_it;
+                }
+                if(flag) is_dominated = true;
+            }
+
+            camera_route.push_back(camera);
+            expand(camera_route, nxt_map);
+            camera_route.pop_back();
         }
-        cluster_route.push_back(cluster_id);
-        expand(cluster_route, tuple.obj_map);
-        cluster_route.pop_back();
     }
-    // add to results
-    if(!is_dominated && cluster_route.size() >= k){
+
+    if(!is_dominated && camera_route.size() >= k){
         map<int, vector<pair<double, double>>> oid2intervals;
         for(auto &obj_entry : obj_map){
             const ObjectInfo &begin_obj = obj_entry.first, &end_obj = *(obj_entry.second.begin());
@@ -327,15 +372,9 @@ void GraphMiner::expand(vector<int> &cluster_route, ObjectMap &obj_map){
             if(it == oid2intervals.end()) oid2intervals[oid] = {{begin_obj.begin_time, end_obj.begin_time}};
             else it->second.emplace_back(begin_obj.begin_time, end_obj.begin_time);
         }
-        // get oids, camera_path and time_intervals
-        set<int> oid_set;
-        for(auto &obj_entry : obj_map) oid_set.insert(obj_entry.first.object_id);
-        vector<int> oids(oid_set.begin(), oid_set.end());
-
-        vector<ll> camera_route(cluster_route.size());
-        for(int idx = 0; idx < cluster_route.size(); ++idx)
-            camera_route[idx] = clusters[cluster_route[idx]].camera;
-
+        // get oids and time_intervals
+        vector<int> oids;
+        for(auto &entry : oid2intervals) oids.push_back(entry.first);
         Intervals intervals;
         pair<double, double> tmp_interval(-1, -1);
         compute_intervals(oid2intervals, oid2intervals.begin(), tmp_interval, intervals);
@@ -349,7 +388,36 @@ void GraphMiner::expand(vector<int> &cluster_route, ObjectMap &obj_map){
             else route_it->second.insert(route_it->second.end(), intervals.begin(), intervals.end());
         }
     }
+}
 
+bool GraphMiner::check_m(vector<ObjectInfo> &infos, int left, int right){
+    if(right - left + 1 < m) return false;
+    vector<int> oids;
+    for(int idx = left; idx <= right; ++idx) oids.push_back(infos[idx].object_id);
+    sort(oids.begin(), oids.end());
+    int counts = 1, pre_val = oids[0];
+    for(int idx = 1; idx < oids.size(); ++idx){
+        if(pre_val != oids[idx]){
+            counts += 1;
+            pre_val = oids[idx];
+        }
+    }
+    return counts >= m;
+}
+
+bool GraphMiner::check_m(vector<pair<ObjectInfo, ObjectInfo>> &infos, int left, int right){
+    if(right - left + 1 < m) return false;
+    vector<int> oids;
+    for(int idx = left; idx <= right; ++idx) oids.push_back(infos[idx].first.object_id);
+    sort(oids.begin(), oids.end());
+    int counts = 1, pre_val = oids[0];
+    for(int idx = 1; idx < oids.size(); ++idx){
+        if(pre_val != oids[idx]){
+            counts += 1;
+            pre_val = oids[idx];
+        }
+    }
+    return counts >= m;
 }
 
 void GraphMiner::run(){
@@ -365,254 +433,9 @@ void GraphMiner::run(){
         Cluster &cluster = clusters[cluster_id];
         if(cluster.skip) continue;
 
-        vector<int> cluster_route{cluster_id};
+        vector<ll> camera_route{cluster.get_camera()};
         ObjectMap obj_map;
-        for(ObjectInfo &member : cluster.members)
-            obj_map.insert(make_pair(member, set<ObjectInfo>{member}));
-        expand(cluster_route, obj_map);
+        for(ObjectInfo &member : cluster.members) obj_map[member] = {member};
+        expand(camera_route, obj_map);
     }
-}
-
-bool GraphMiner::is_subpath(const vector<ll> &short_path, const vector<ll> &long_path){
-    if(short_path.size() > long_path.size()) return false;
-    int s_ptr = 0, l_ptr = 0;
-    while(s_ptr < short_path.size() && l_ptr < long_path.size()) {
-        if(short_path[s_ptr] == long_path[l_ptr]) s_ptr++;
-        l_ptr++;
-    }
-    return s_ptr == short_path.size();
-}
-
-void GraphMiner::deduplicate_twin(map<vector<ll>, Intervals> &super_map, map<vector<ll>, Intervals> &child_map){
-    for(auto child_it = child_map.begin(); child_it != child_map.end();){
-        const vector<ll> &path = child_it->first;
-        vector<pair<double, double>> &intervals = child_it->second;
-        for(auto &super_entry : super_map){
-            const vector<ll> &super_path = super_entry.first;
-            if(super_path.size() < path.size()) continue;
-
-            if(is_subpath(path, super_path)){
-                vector<pair<double, double>> &super_intervals = super_entry.second;
-                for(auto it = intervals.begin(); it != intervals.end();){
-                    bool erase_flag = false;
-                    for(auto &super_interval : super_intervals){
-                        if(super_interval.first > it->first) break;
-                        if(super_interval.second >= it->second) {
-                            erase_flag = true;
-                            break;
-                        }
-                    }
-                    if(erase_flag) it = intervals.erase(it);
-                    else it++;
-                }
-                if(intervals.empty()) break;
-            }
-        }
-        if(intervals.empty()) child_it = child_map.erase(child_it);
-        else child_it++;
-    }
-}
-
-void GraphMiner::deduplicate_time(map<vector<ll>, Intervals> &cameras_map){
-    for(auto it = cameras_map.begin(); it != cameras_map.end();){
-        vector<pair<double, double>> &time_intervals = it->second;
-        if(time_intervals.empty()) it = cameras_map.erase(it);
-        else{
-            sort(time_intervals.begin(), time_intervals.end());
-            vector<pair<double, double>> new_intervals;
-            pair<double, double> pre_interval = time_intervals.front();
-            for(int time_idx = 1; time_idx < time_intervals.size(); time_idx++){
-                pair<double, double> &interval = time_intervals[time_idx];
-                if(interval.first == pre_interval.first) pre_interval.second = interval.second;
-                else{
-                    if(interval.second > pre_interval.second){
-                        new_intervals.push_back(pre_interval);
-                        pre_interval = interval;
-                    }
-                }
-            }
-            new_intervals.push_back(pre_interval);
-            it->second = new_intervals;
-            it++;
-        }
-    }
-
-    vector<vector<ll>> paths;
-    for(auto &cameras_entry : cameras_map) paths.push_back(cameras_entry.first);
-    vector<pair<pair<double, double>, int>> interval_infos;
-    int entry_idx = 0;
-    for(auto &cameras_entry : cameras_map){
-        for(pair<double, double> &interval : cameras_entry.second)
-            interval_infos.emplace_back(interval, entry_idx);
-        entry_idx++;
-    }
-    sort(interval_infos.begin(), interval_infos.end(),
-         [](const pair<pair<double, double>, int> &info1, const pair<pair<double, double>, int> &info2){
-             return info1.first < info2.first;
-         });
-
-    vector<bool> contain_flags(interval_infos.size(), false);
-    vector<vector<int>> child_pointers(interval_infos.size(), vector<int>());
-    for(int info_idx = 0; info_idx < interval_infos.size(); info_idx++){
-        if(contain_flags[info_idx]) continue;
-        const pair<double, double> &interval = interval_infos[info_idx].first;
-        for(int nxt_idx = info_idx + 1; nxt_idx < interval_infos.size(); nxt_idx++){
-            const pair<double, double> &nxt_interval = interval_infos[nxt_idx].first;
-            if(interval.first == nxt_interval.first){
-                child_pointers[nxt_idx].push_back(info_idx);
-                if(interval.second == nxt_interval.second) child_pointers[info_idx].push_back(nxt_idx);
-            }
-            else{
-                if(interval.second < nxt_interval.first) break;
-                if(interval.second >= nxt_interval.second) child_pointers[info_idx].push_back(nxt_idx);
-            }
-        }
-
-        const vector<ll> &path = paths[interval_infos[info_idx].second];
-        vector<int> &children = child_pointers[info_idx];
-        for(int child_idx : children){
-            if(contain_flags[child_idx]) continue;
-            const vector<ll> &child_path = paths[interval_infos[child_idx].second];
-            if(is_subpath(child_path, path)) contain_flags[child_idx] = true;
-        }
-    }
-
-    cameras_map.clear();
-    for(int info_idx = 0; info_idx < interval_infos.size(); info_idx++){
-        if(contain_flags[info_idx]) continue;
-        const vector<ll> &path = paths[interval_infos[info_idx].second];
-        auto it = cameras_map.find(path);
-        if(it == cameras_map.end())
-            cameras_map[path] = vector<pair<double, double>>{interval_infos[info_idx].first};
-        else
-            it->second.push_back(interval_infos[info_idx].first);
-    }
-}
-
-void GraphMiner::deduplicate(){
-    // initialize necessary data structure
-    vector<map<vector<int>, map<vector<ll>, Intervals>>::iterator> idx2it;
-    int crt_idx = 0;
-    map<int, vector<int>> length2idx;
-    for(auto it = results.begin(); it != results.end(); it++){
-        int length = int(it->first.size());
-        auto length_it = length2idx.find(length);
-        if(length_it == length2idx.end()) length2idx[length] = vector<int>{crt_idx};
-        else length_it->second.push_back(crt_idx);
-
-        idx2it.push_back(it);
-        crt_idx++;
-    }
-    vector<int> idcs;
-    vector<vector<int>> out_links;
-    vector<int> starts;
-    int item_idx = 0;
-    for(auto &entry : length2idx){
-        starts.push_back(item_idx);
-        item_idx += int(entry.second.size());
-        for(int idx : entry.second){
-            idcs.push_back(idx);
-            out_links.emplace_back();
-        }
-    }
-    // get inversion list
-    unordered_map<int, unordered_set<int>> inversion_lst;
-    for(int i = 0; i < idcs.size(); i++){
-        const vector<int> &object_ids = idx2it[idcs[i]]->first;
-        for(int object_id : object_ids){
-            auto it = inversion_lst.find(object_id);
-            if(it == inversion_lst.end()) inversion_lst[object_id] = unordered_set<int>{i};
-            else it->second.insert(i);
-        }
-    }
-    for(int level = 0; level < starts.size(); level++){
-        int start_pos = starts[level];
-        int end_pos = (level == starts.size() - 1) ? idcs.size() - 1 : starts[level + 1] - 1;
-        for(int i = start_pos; i <= end_pos; i++){
-            const vector<int> &object_ids = idx2it[idcs[i]]->first;
-            // choose object_id which belongs to the smallest number of object_set
-            int min_number = INT_MAX; int min_object = -1;
-            for(int object_id : object_ids){
-                int crt_number = inversion_lst[object_id].size();
-                if(crt_number < min_number){
-                    min_number = crt_number;
-                    min_object = object_id;
-                }
-            }
-            if(min_object == -1) cerr << "very weird, from BIDE_Verifier::de_duplicate" << endl;
-
-            unordered_set<int> intersection = inversion_lst[min_object];
-            for(int object_id : object_ids){
-                if(object_id == min_object) continue;
-                unordered_set<int> &large_set = inversion_lst[object_id];
-                for(auto it = intersection.begin(); it != intersection.end();){
-                    if(large_set.find(*it) == large_set.end()) it = intersection.erase(it);
-                    else it++;
-                }
-            }
-            intersection.erase(i);
-            for(int super_pos : intersection) out_links[i].push_back(super_pos);
-            for(int object_id : object_ids) inversion_lst[object_id].erase(i);
-        }
-    }
-    // continue to check according to $out_links$
-    for(int pos = out_links.size() - 1; pos >= 0; pos--){
-        deduplicate_time(idx2it[idcs[pos]]->second);
-        for(int super_pos : out_links[pos]){
-            deduplicate_twin(idx2it[idcs[super_pos]]->second, idx2it[idcs[pos]]->second);
-        }
-    }
-    for(auto result_it = results.begin(); result_it != results.end();){
-        if(result_it->second.empty()) result_it = results.erase(result_it);
-        else result_it++;
-    }
-}
-
-void GraphMiner::print_results(){
-    for(auto &object_entry : results){
-        auto &object_ids = object_entry.first;
-        cout<<"{";
-        for(const int &object_id : object_ids){
-            cout<<travel_paths[object_id].object_name;
-            if(&object_id != &object_ids.back()) cout<<",";
-        }
-        cout<<"}:[";
-        for(auto &path_entry : object_entry.second){
-            for(const ll &camera : path_entry.first){
-                cout<<camera;
-                if(&camera != &path_entry.first.back()) cout<<"-";
-            }
-            cout<<"(";
-            for(auto &p : path_entry.second){
-                cout<<"<"<<p.first<<":"<<p.second<<">,";
-            }
-            cout<<"), ";
-        }
-        cout<<"]"<<endl;
-    }
-}
-
-void GraphMiner::dump_results(string file_name){
-    ofstream ofs;
-    ofs.open(file_name, ios::out);
-    ofs<<"Objects,Path"<<endl;
-    for(auto &object_entry : results){
-        auto &object_ids = object_entry.first;
-        string s_obj;
-        for(const int &object_id : object_ids){
-            s_obj += travel_paths[object_id].object_name;
-            if(&object_id != &object_ids.back()) s_obj += " ";
-            else s_obj += ",";
-        }
-        for(auto &path_entry : object_entry.second){
-            string s_camera;
-            for(const ll &camera : path_entry.first){
-                s_camera += to_string(camera);
-                if(&camera != &path_entry.first.back()) s_camera += " ";
-                else s_camera += "\n";
-            }
-            ofs<<s_obj<<s_camera;
-        }
-    }
-    ofs.close();
 }
