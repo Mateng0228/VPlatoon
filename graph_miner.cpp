@@ -5,8 +5,8 @@
 #include <iostream>
 #include <unordered_set>
 #include <unordered_map>
-#include<climits>
 #include <fstream>
+#include <random>
 #include "graph_miner.h"
 
 class GraphMiner::Kosaraju{
@@ -326,41 +326,114 @@ void GraphMiner::expand(vector<ll> &camera_route, ObjectMap &obj_map){
         }
     }
 
-    bool is_dominated = false; // whether the current pattern is dominated
-    for(auto &info_entry : camera2infos){
-        ll camera = info_entry.first;
-        vector<pair<ObjectInfo, ObjectInfo>> &infos = info_entry.second;
+    vector<ConditionalCluster> cdt_clusters;
+    unordered_map<int, map<int, ClusterIds>> cluster_maps; // { oid : {tpid:cluster_ids} }
+    unordered_map<int, vector<pair<int, ClusterIds>>> cluster_paths; // { oid : [(tpid,cluster_ids)] }
+    unordered_map<int, vector<pair<int, int>>> cluster2positions; // { cluster_id : [(oid, pid in $cluster_paths$)] }
+    int cluster_idx = 0;
+    for(auto &camera_entry : camera2infos){
+        ll camera = camera_entry.first;
+        vector<pair<ObjectInfo, ObjectInfo>> &infos = camera_entry.second;
         if(infos.size() < m) continue;
 
-        vector<ConditionalCluster> cdt_clusters;
         local_cluster(camera, infos, cdt_clusters);
-        for(ConditionalCluster &cdt_cluster : cdt_clusters){
-            auto &key = cdt_cluster.key;
-            auto itr = key2cid.find(key);
-            if(itr != key2cid.end()){
-                int n_member = get<2>(key) - get<1>(key) + 1;
-                if(cdt_cluster.n_ends == n_member) clusters[itr->second].skip = true;
-            }
-
-            ObjectMap &nxt_map = cdt_cluster.members;
-            if(!is_dominated && nxt_map.size() == obj_map.size()){
-                bool flag = true;
-                auto nxt_it = nxt_map.begin(), crt_it = obj_map.begin();
-                while(nxt_it != nxt_map.end()){
-                    if(*(nxt_it->second.begin()) <= *(crt_it->second.begin())){
-                        flag = false;
-                        break;
-                    }
-                    ++nxt_it;
-                    ++crt_it;
+        while(cluster_idx < cdt_clusters.size()){
+            ObjectMap &member_map = cdt_clusters[cluster_idx].members;
+            for(auto &member_entry : member_map){
+                int oid = member_entry.first.object_id;
+                auto &sp_path = simplified_paths[oid];
+                map<int, ClusterIds> &cluster_map = cluster_maps[oid];
+                for(const ObjectInfo &end_info : member_entry.second){
+                    int tpid = sp_path[end_info.pid].first;
+                    cluster_map[tpid].push_back(cluster_idx);
                 }
-                if(flag) is_dominated = true;
             }
-
-            camera_route.push_back(camera);
-            expand(camera_route, nxt_map);
-            camera_route.pop_back();
+            ++cluster_idx;
         }
+    }
+    for(auto &map_entry : cluster_maps){
+        int oid = map_entry.first;
+        vector<pair<int, ClusterIds>> &cluster_path = cluster_paths[oid];
+        for(auto &entry : map_entry.second){
+            ClusterIds &cluster_ids = entry.second;
+            sort(cluster_ids.begin(), cluster_ids.begin());
+            auto it = unique(cluster_ids.begin(), cluster_ids.end());
+            cluster_ids.erase(it, cluster_ids.end());
+
+            cluster_path.emplace_back(entry.first, cluster_ids);
+        }
+    }
+    for(auto &path_entry : cluster_paths){
+        int oid = path_entry.first;
+        vector<pair<int, ClusterIds>> &cluster_path = path_entry.second;
+        for(int pid = 0; pid < cluster_path.size(); ++pid){
+            ClusterIds &cluster_ids = cluster_path[pid].second;
+            for(int cluster_id : cluster_ids) cluster2positions[cluster_id].emplace_back(oid, pid);
+        }
+    }
+
+    vector<int> valid_clusters;
+    for(int cid = 0; cid < cdt_clusters.size(); ++cid){
+        unordered_set<int> common_clusters;
+        vector<pair<int, int>> &positions = cluster2positions[cid];
+        for(auto it = positions.begin(); it != positions.end(); ++it){
+            vector<pair<int, ClusterIds>> &cluster_path = cluster_paths[it->first];
+            int pid = it->second, tpid = cluster_path[pid].first;
+            if(it == positions.begin()){
+                for(int prev_pid = pid - 1; prev_pid >= 0 && tpid - cluster_path[prev_pid].first - 1 <= d; --prev_pid){
+                    ClusterIds &prev_clusters = cluster_path[prev_pid].second;
+                    for(int prev_cluster : prev_clusters)
+                        if(prev_cluster != cid) common_clusters.insert(prev_cluster);
+                }
+            }
+            else{
+                unordered_set<int> intersection;
+                for(int prev_pid = pid - 1; prev_pid >= 0 && tpid - cluster_path[prev_pid].first - 1 <= d; --prev_pid){
+                    ClusterIds &prev_clusters = cluster_path[prev_pid].second;
+                    for(int prev_cluster : prev_clusters){
+                        if(prev_cluster != cid && common_clusters.find(prev_cluster) != common_clusters.end())
+                            intersection.insert(prev_cluster);
+                    }
+                }
+                common_clusters = intersection;
+            }
+            if(common_clusters.empty()) break;
+        }
+        if(common_clusters.empty()) valid_clusters.push_back(cid);
+    }
+
+//    vector<int> valid_clusters;
+//    for(int cid = 0; cid < cdt_clusters.size(); ++cid) valid_clusters.push_back(cid);
+
+    bool is_dominated = false; // whether the current pattern is dominated
+    for(int cluster_id : valid_clusters){
+        ConditionalCluster &cdt_cluster = cdt_clusters[cluster_id];
+        auto &key = cdt_cluster.key;
+        auto itr = key2cid.find(key);
+        if(itr != key2cid.end()){
+            int n_member = get<2>(key) - get<1>(key) + 1;
+            if(cdt_cluster.n_ends == n_member) clusters[itr->second].skip = true;
+        }
+
+        ObjectMap &nxt_map = cdt_cluster.members;
+        if(!is_dominated && nxt_map.size() == obj_map.size()){
+            bool flag = true;
+            auto nxt_it = nxt_map.begin(), crt_it = obj_map.begin();
+            while(nxt_it != nxt_map.end()){
+                if(*(nxt_it->second.begin()) <= *(crt_it->second.begin())){
+                    flag = false;
+                    break;
+                }
+                ++nxt_it;
+                ++crt_it;
+            }
+            if(flag) is_dominated = true;
+        }
+
+        ll camera = get<0>(key);
+        camera_route.push_back(camera);
+        expand(camera_route, nxt_map);
+        camera_route.pop_back();
     }
 
     if(!is_dominated && camera_route.size() >= k){
@@ -428,6 +501,11 @@ void GraphMiner::run(){
     sort(cluster_ids.begin(), cluster_ids.end(), [this](const int &cid1, const int &cid2){
         return clusters[cid1].order < clusters[cid2].order;
     });
+
+//    std::random_device rd;
+//    std::mt19937 g(rd());
+//    std::shuffle(cluster_ids.begin(), cluster_ids.end(), g);
+
     // expand each cluster according to the order in $cluster_ids$
     for(int cluster_id : cluster_ids){
         Cluster &cluster = clusters[cluster_id];

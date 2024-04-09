@@ -13,7 +13,7 @@ int main(int argc, char *argv[]){
 //    query.mine_baseline();
     query.mine_improved();
 
-//    check("ptr_results/test0.txt", "ptr_results/test1.txt");
+//    check("results/test0.txt", "results/test1.txt");
 
     return 0;
 }
