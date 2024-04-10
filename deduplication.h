@@ -33,9 +33,7 @@ void Deduplicator::deduplicate(){
     map<int, vector<int>> length2idx;
     for(auto it = results.begin(); it != results.end(); it++){
         int length = static_cast<int>(it->first.size());
-        auto length_it = length2idx.find(length);
-        if(length_it == length2idx.end()) length2idx[length] = {crt_idx};
-        else length_it->second.push_back(crt_idx);
+        length2idx[length].push_back(crt_idx);
 
         idx2it.push_back(it);
         crt_idx++;
@@ -56,11 +54,7 @@ void Deduplicator::deduplicate(){
     unordered_map<int, unordered_set<int>> inversion_lst;
     for(int i = 0; i < idcs.size(); i++){
         const vector<int> &object_ids = idx2it[idcs[i]]->first;
-        for(int object_id : object_ids){
-            auto it = inversion_lst.find(object_id);
-            if(it == inversion_lst.end()) inversion_lst[object_id] = unordered_set<int>{i};
-            else it->second.insert(i);
-        }
+        for(int object_id : object_ids) inversion_lst[object_id].insert(i);
     }
     for(int level = 0; level < starts.size(); level++){
         int start_pos = starts[level];
@@ -239,11 +233,7 @@ void Deduplicator::deduplicate_time(map<vector<ll>, vector<pair<double, double>>
     for(int info_idx = 0; info_idx < interval_infos.size(); info_idx++){
         if(contain_flags[info_idx]) continue;
         const vector<ll> &path = paths[interval_infos[info_idx].second];
-        auto it = cameras_map.find(path);
-        if(it == cameras_map.end())
-            cameras_map[path] = vector<pair<double, double>>{interval_infos[info_idx].first};
-        else
-            it->second.push_back(interval_infos[info_idx].first);
+        cameras_map[path].push_back(interval_infos[info_idx].first);
     }
 }
 

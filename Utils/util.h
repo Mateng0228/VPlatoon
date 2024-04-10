@@ -22,7 +22,7 @@ void get_paths(string path, vector<Path>& paths) {
     }
     closedir(pDir);
 
-    for(int idx = 0;idx < file_names.size();idx++){
+    for(int idx = 0; idx < file_names.size(); ++idx){
         string &file_name = file_names[idx];
         string file_path = path + '/' + file_names[idx];
         string object_name = file_name.substr(0, file_name.find('.'));
@@ -53,14 +53,14 @@ void get_paths(string path, vector<Path>& paths) {
 }
 
 void check(string path1, string path2){
-    map<set<int>, set<vector<int>>> convoy1;
+    map<set<int>, set<vector<ll>>> convoy1;
     ifstream fin1;
     fin1.open(path1, ios::in);
     string buffer;
     getline(fin1, buffer);
     while(getline(fin1, buffer)){
         set<int> objects;
-        vector<int> sequence;
+        vector<ll> sequence;
         int pos = buffer.find(',');
         string object_str = buffer.substr(0, pos);
         string sequence_str = buffer.substr(pos + 1, buffer.length() - 1 - pos);
@@ -74,22 +74,21 @@ void check(string path1, string path2){
         sequence_str += " ";
         left = 0, right = sequence_str.find(' ', 0);
         while(right != std::string::npos){
-            sequence.push_back(stoi(sequence_str.substr(left, right - left)));
+            sequence.push_back(stoll(sequence_str.substr(left, right - left)));
             left = right + 1;
             right = sequence_str.find(' ', left);
         }
-        if(convoy1.find(objects) == convoy1.end()) convoy1[objects] = set<vector<int>>();
         convoy1[objects].insert(sequence);
     }
     fin1.close();
 
-    map<set<int>, set<vector<int>>> convoy2;
+    map<set<int>, set<vector<ll>>> convoy2;
     ifstream fin2;
     fin2.open(path2, ios::in);
     getline(fin2, buffer);
     while(getline(fin2, buffer)){
         set<int> objects;
-        vector<int> sequence;
+        vector<ll> sequence;
         int pos = buffer.find(',');
         string object_str = buffer.substr(0, pos);
         string sequence_str = buffer.substr(pos + 1, buffer.length() - 1 - pos);
@@ -103,25 +102,24 @@ void check(string path1, string path2){
         sequence_str += " ";
         left = 0, right = sequence_str.find(' ', 0);
         while(right != std::string::npos){
-            sequence.push_back(stoi(sequence_str.substr(left, right - left)));
+            sequence.push_back(stoll(sequence_str.substr(left, right - left)));
             left = right + 1;
             right = sequence_str.find(' ', left);
         }
-        if(convoy2.find(objects) == convoy2.end()) convoy2[objects] = set<vector<int>>();
         convoy2[objects].insert(sequence);
     }
     fin2.close();
 
-    map<set<int>, set<vector<int>>> diff_map1, diff_map2;
+    map<set<int>, set<vector<ll>>> diff_map1, diff_map2;
     for(auto &p : convoy1){
         const set<int>& objects1 = p.first;
         if(convoy2.find(objects1) == convoy2.end()) diff_map1[objects1] = p.second;
         else{
-            set<vector<int>>& sequence_list1 = p.second;
-            set<vector<int>>& sequence_list2 = convoy2[objects1];
-            for(const vector<int>& sequence1 : sequence_list1){
+            set<vector<ll>>& sequence_list1 = p.second;
+            set<vector<ll>>& sequence_list2 = convoy2[objects1];
+            for(const vector<ll>& sequence1 : sequence_list1){
                 if(sequence_list2.find(sequence1) == sequence_list2.end()){
-                    if(diff_map1.find(objects1) == diff_map1.end()) diff_map1[objects1] = set<vector<int>>();
+                    if(diff_map1.find(objects1) == diff_map1.end()) diff_map1[objects1] = set<vector<ll>>();
                     diff_map1[objects1].insert(sequence1);
                 }
                 else sequence_list2.erase(sequence1);
@@ -138,9 +136,9 @@ void check(string path1, string path2){
         cout<<"{";
         for(int object : p.first) cout<<object<<",";
         cout<<"} : [";
-        for(const vector<int>& sequence : p.second){
+        for(const vector<ll>& sequence : p.second){
             counts++;
-            for(int item : sequence) cout<<item<<"-";
+            for(ll item : sequence) cout<<item<<"-";
             cout<<", ";
         }
         cout<<"]"<<endl;
@@ -152,9 +150,9 @@ void check(string path1, string path2){
         cout<<"{";
         for(int object : p.first) cout<<object<<",";
         cout<<"} : [";
-        for(const vector<int>& sequence : p.second){
+        for(const vector<ll>& sequence : p.second){
             counts++;
-            for(int item : sequence) cout<<item<<"-";
+            for(ll item : sequence) cout<<item<<"-";
             cout<<", ";
         }
         cout<<"]"<<endl;

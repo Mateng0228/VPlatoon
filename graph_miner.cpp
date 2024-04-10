@@ -124,9 +124,7 @@ void GraphMiner::local_cluster(ll camera, vector<pair<ObjectInfo, ObjectInfo>> &
                 ObjectMap mp;
                 for(int idx = left; idx <= right; ++idx){
                     ObjectInfo &begin_info = infos[idx].first, &end_info = infos[idx].second;
-                    auto mp_itr = mp.find(begin_info);
-                    if(mp_itr == mp.end()) mp[begin_info] = {end_info};
-                    else mp_itr->second.insert(end_info);
+                    mp[begin_info].insert(end_info);
                 }
                 ObjectInfo &min_info = infos[left].second, &max_info = infos[right].second;
                 int min_order = simplified_paths[min_info.object_id][min_info.pid].second;
@@ -149,9 +147,7 @@ void GraphMiner::local_cluster(ll camera, vector<pair<ObjectInfo, ObjectInfo>> &
         ObjectMap mp;
         for(int idx = left; idx <= right; ++idx){
             ObjectInfo &begin_info = infos[idx].first, &end_info = infos[idx].second;
-            auto mp_itr = mp.find(begin_info);
-            if(mp_itr == mp.end()) mp[begin_info] = {end_info};
-            else mp_itr->second.insert(end_info);
+            mp[begin_info].insert(end_info);
         }
         ObjectInfo &min_info = infos[left].second, &max_info = infos[right].second;
         int min_order = simplified_paths[min_info.object_id][min_info.pid].second;
@@ -162,18 +158,14 @@ void GraphMiner::local_cluster(ll camera, vector<pair<ObjectInfo, ObjectInfo>> &
 }
 
 void GraphMiner::init_clusters(vector<vector<pair<int, ClusterIds>>> &cluster_paths){
-    // do temporal clustering for each camera
+    // collect objects and corresponding positions under each camera
     map<ll, vector<ObjectInfo>> camera2objects;
-    for(int oid = 0; oid < travel_paths.size(); oid++){
-        Path &path = travel_paths[oid];
-        for(int pid = 0; pid < path.positions.size(); pid++){
-            Position &p = path.positions[pid];
+    for(int oid = 0; oid < travel_paths.size(); ++oid){
+        vector<Position> &positions = travel_paths[oid].positions;
+        for(int pid = 0; pid < positions.size(); ++pid){
+            Position &p = positions[pid];
             ll camera = p.camera_id;
-            auto it = camera2objects.find(camera);
-            if(it == camera2objects.end())
-                camera2objects[camera] = vector<ObjectInfo>{ObjectInfo(oid, pid, p.begin_time, p.end_time)};
-            else
-                it->second.emplace_back(oid, pid, p.begin_time, p.end_time);
+            camera2objects[camera].emplace_back(oid, pid, p.begin_time, p.end_time);
         }
     }
     // get complete $simplified_paths$ and local variable $cluster_paths$
@@ -197,7 +189,7 @@ void GraphMiner::init_clusters(vector<vector<pair<int, ClusterIds>>> &cluster_pa
 
             cluster_paths[info.object_id][info.pid].first = info.pid;
         }
-        // fill up cluster-related data structure
+        // fill up other cluster-related data structure
         for(pair<int, int> &cluster_range : cluster_ranges){
             int min_order = cluster_range.first, max_order = cluster_range.second;
             tuple<ll, int, int> key(camera, min_order, max_order);
@@ -262,9 +254,7 @@ void GraphMiner::compute_order(){
         }
     }
     vector<vector<int>> graph;
-    for(set<int> &adj_set : adj_sets){
-        graph.emplace_back(adj_set.begin(), adj_set.end());
-    }
+    for(set<int> &adj_set : adj_sets) graph.emplace_back(adj_set.begin(), adj_set.end());
     // compute the topological order of scc
     Kosaraju scc_finder(graph);
     vector<vector<int>> components = scc_finder.get_scc();
@@ -318,9 +308,7 @@ void GraphMiner::expand(vector<ll> &camera_route, ObjectMap &obj_map){
 
                 ll nxt_camera = travel_path[nxt_tpid].camera_id;
                 ObjectInfo nxt_info(oid, nxt_spid, travel_path[nxt_tpid].begin_time, travel_path[nxt_tpid].end_time);
-                auto itr = camera2infos.find(nxt_camera);
-                if(itr == camera2infos.end()) camera2infos[nxt_camera] = {{begin_info, nxt_info}};
-                else itr->second.emplace_back(begin_info, nxt_info);
+                camera2infos[nxt_camera].emplace_back(begin_info, nxt_info);
             }
             border = base_spid;
         }
@@ -420,7 +408,7 @@ void GraphMiner::expand(vector<ll> &camera_route, ObjectMap &obj_map){
             bool flag = true;
             auto nxt_it = nxt_map.begin(), crt_it = obj_map.begin();
             while(nxt_it != nxt_map.end()){
-                if(*(nxt_it->second.begin()) <= *(crt_it->second.begin())){
+                if(*(nxt_it->second.begin()) < *(crt_it->second.begin())){
                     flag = false;
                     break;
                 }
@@ -441,9 +429,7 @@ void GraphMiner::expand(vector<ll> &camera_route, ObjectMap &obj_map){
         for(auto &obj_entry : obj_map){
             const ObjectInfo &begin_obj = obj_entry.first, &end_obj = *(obj_entry.second.begin());
             int oid = begin_obj.object_id;
-            auto it = oid2intervals.find(oid);
-            if(it == oid2intervals.end()) oid2intervals[oid] = {{begin_obj.begin_time, end_obj.begin_time}};
-            else it->second.emplace_back(begin_obj.begin_time, end_obj.begin_time);
+            oid2intervals[oid].emplace_back(begin_obj.begin_time, end_obj.begin_time);
         }
         // get oids and time_intervals
         vector<int> oids;
@@ -452,14 +438,8 @@ void GraphMiner::expand(vector<ll> &camera_route, ObjectMap &obj_map){
         pair<double, double> tmp_interval(-1, -1);
         compute_intervals(oid2intervals, oid2intervals.begin(), tmp_interval, intervals);
         // insert into results
-        auto object_it = results.find(oids);
-        if(object_it == results.end()) results[oids] = {{camera_route, intervals}};
-        else{
-            auto &route_map = object_it->second;
-            auto route_it = route_map.find(camera_route);
-            if(route_it == route_map.end()) route_map[camera_route] = intervals;
-            else route_it->second.insert(route_it->second.end(), intervals.begin(), intervals.end());
-        }
+        Intervals &result_intervals = results[oids][camera_route];
+        result_intervals.insert(result_intervals.end(), intervals.begin(), intervals.end());
     }
 }
 
