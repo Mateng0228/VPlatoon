@@ -339,6 +339,7 @@ void GraphMiner::expand(vector<ll> &camera_route, ObjectMap &obj_map){
             ++cluster_idx;
         }
     }
+    // gap
     for(auto &map_entry : cluster_maps){
         int oid = map_entry.first;
         vector<pair<int, ClusterIds>> &cluster_path = cluster_paths[oid];

@@ -184,6 +184,13 @@ private:
                 if(mask[pid] != -1) valid_pids.push_back(pid);
             }
 
+//            for(int idx = 0; idx < static_cast<int>(valid_pids.size()); idx++){
+//                int pid = valid_pids[idx];
+//                tcs_path.positions.push_back(ref_path.positions[pid]);
+//                tcs_path.tcs_ids.push_back(mask[pid]);
+//                tcs_path.offsets.push_back(pid);
+//            }
+
             pair<int, int> idx_range(-1, -1);
             for(int idx = 0; idx < static_cast<int>(valid_pids.size()) - 1; idx++){
                 if(idx_range.first == -1) idx_range = make_pair(idx, idx);

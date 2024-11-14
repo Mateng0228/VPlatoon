@@ -119,13 +119,18 @@ void Query::print_results(){
 void Query::dump_results(string file_name){
     ofstream ofs;
     ofs.open(file_name, ios::out);
-    ofs<<"Objects,Path"<<endl;
+    ofs<<"Objects,Path,BeginTime,EndTime"<<endl;
     for(auto &object_entry : *ptr_results){
         auto &object_ids = object_entry.first;
+        vector<int> object_names;
+        for(const int &object_id : object_ids) {
+            object_names.push_back(stoi(travel_paths[object_id].object_name));
+        }
+        sort(object_names.begin(), object_names.end());
         string s_obj;
-        for(const int &object_id : object_ids){
-            s_obj += travel_paths[object_id].object_name;
-            if(&object_id != &object_ids.back()) s_obj += " ";
+        for(const int &object_name : object_names){
+            s_obj += to_string(object_name);
+            if(&object_name != &object_names.back()) s_obj += " ";
             else s_obj += ",";
         }
         for(auto &path_entry : object_entry.second){
@@ -133,9 +138,11 @@ void Query::dump_results(string file_name){
             for(const ll &camera : path_entry.first){
                 s_camera += to_string(camera);
                 if(&camera != &path_entry.first.back()) s_camera += " ";
-                else s_camera += "\n";
+                else s_camera += ",";
             }
-            ofs<<s_obj<<s_camera;
+            for(pair<double, double> &iv : path_entry.second){
+                ofs<<s_obj<<s_camera<<iv.first<<","<<iv.second<<endl;
+            }
         }
     }
     ofs.close();

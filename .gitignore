@@ -2,4 +2,4 @@ datasets/
 results/
 cmake-build-debug
 .idea
-*.exe
+Experiment.exe
