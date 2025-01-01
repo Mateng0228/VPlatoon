@@ -11,7 +11,7 @@ This project provides the source code for our paper  "Mining Platoon Patterns fr
   - **Make:** A compatible version 4.3 of the 'make' tool is required to build the project.
 
 ## Installation & Usage
-> Before starting, please ensure that you have installed and met all the requirements mentioned in the previous section.
+Before starting, please ensure that you have installed the necessary C++ runtime library and met all the requirements outlined in the previous section.
 
 1. **Clone the repository to your local machine:**
 ```shell
@@ -31,9 +31,10 @@ cd build
 cmake ..
 make
 ```
-5. **Run the executable file:**
+
+You can now find and quickly run the final executable file in the corresponding "build" directory following the instructions below:
 ```shell
-Experiment "dataset-name" "m" "k" "d" "epsilon"
+YourExecutableFile "dataset" "m" "k" "d" "epsilon"
 ```
 
 ## Contact
