@@ -38,3 +38,7 @@ Experiment "dataset-name" "m" "k" "d" "epsilon"
 
 ## Contact
 If you encounter any problems, please contact the code maintainer at [mt0228@zju.edu.cn](mailto:mt0228@zju.edu.cn). Please note that simply raising "Issues" in github may not always be the most effective way to get our attention.
+
+## License
+The source code is released under the MIT License. See the [LICENSE](./LICENSE) file for details.  
+The associated technical report is available on arXiv under a perpetual, non-exclusive license: [arXiv:2412.20177](https://arxiv.org/abs/2412.20177).
