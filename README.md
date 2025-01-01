@@ -34,4 +34,7 @@ make
 5. **Run the executable file:**
 ```shell
 Experiment "dataset-name" "m" "k" "d" "epsilon"
-``` 
+```
+
+## Contact
+If you encounter any problems, please contact the code maintainer at [mt0228@zju.edu.cn](mailto:mt0228@zju.edu.cn). Please note that simply raising "Issues" in github may not always be the most effective way to get our attention.
