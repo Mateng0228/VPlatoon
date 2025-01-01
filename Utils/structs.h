@@ -36,6 +36,16 @@ struct TCS_Path : Path{
     }
 };
 
+struct Appearance{
+    int sid; int begin_id; int end_id;
+    vector<int> pids;
+    Appearance(int id, int begin, int end){
+        this->sid = id;
+        this->begin_id = begin;
+        this->end_id = end;
+    }
+};
+
 class Hasher{
 public:
     size_t operator()(const tuple<long long, int, int> &key) const {

@@ -8,118 +8,10 @@
 #include <iostream>
 #include <algorithm>
 #include "Utils/structs.h"
+#include "fsm_verification.h"
+#include "deduplication.h"
 
 using namespace std;
-
-struct Appearance{
-    int sid; int begin_id; int end_id;
-    vector<int> pids;
-    Appearance(int id, int begin, int end){
-        this->sid = id;
-        this->begin_id = begin;
-        this->end_id = end;
-    }
-};
-
-class Gap_BIDE{
-private:
-    vector<Path> &SDB;
-    int threshold;
-    int max_gap;
-    map<vector<ll>, vector<Appearance>> sequential_patterns;
-
-    void pattern_growth(vector<ll> &sequence, pair<int, vector<Appearance>> &appearances){
-        map<ll, pair<int, vector<Appearance>>> forward_items;
-        forward_check(appearances, forward_items);
-        bool has_forward_extension = false;
-        for(auto &entry : forward_items){
-            if(entry.second.second.size() == appearances.second.size()){
-                has_forward_extension = true;
-                break;
-            }
-        }
-        // output current pattern if necessary
-        if(!has_forward_extension) sequential_patterns[sequence] = appearances.second;
-        // pattern growth
-        for(auto &entry : forward_items){
-            if(entry.second.first >= threshold){
-                vector<ll> attached_sequence(sequence);
-                attached_sequence.push_back(entry.first);
-                pattern_growth(attached_sequence, entry.second);
-            }
-        }
-    }
-
-    void forward_check(pair<int, vector<Appearance>> &appearances, map<ll, pair<int, vector<Appearance>>> &item_map){
-        Path *crt_path = nullptr;
-        unordered_set<ll> cameras;
-        for(const Appearance &appearance : appearances.second){
-            if(crt_path == nullptr) crt_path = &SDB[appearance.sid];
-            else if(crt_path != &SDB[appearance.sid]){
-                crt_path = &SDB[appearance.sid];
-                for(ll camera_id : cameras) item_map.find(camera_id)->second.first += 1;
-                cameras.clear();
-            }
-            int path_length = static_cast<int>(crt_path->positions.size());
-            for(int pos_id = appearance.end_id + 1; pos_id <= min(appearance.end_id + 1 + max_gap, path_length - 1); ++pos_id){
-                ll camera_id = crt_path->positions[pos_id].camera_id;
-                cameras.insert(camera_id);
-                Appearance new_appearance(crt_path->object_id, appearance.begin_id, pos_id);
-                new_appearance.pids = appearance.pids;
-                new_appearance.pids.push_back(pos_id);
-
-                auto itr = item_map.find(camera_id);
-                if(itr == item_map.end()){
-                    item_map.insert(make_pair(
-                            camera_id,
-                            make_pair(0, vector<Appearance>{new_appearance})
-                    ));
-                }
-                else itr->second.second.push_back(new_appearance);
-            }
-        }
-        for(ll camera_id : cameras) item_map.find(camera_id)->second.first += 1;
-    }
-
-public:
-    Gap_BIDE(vector<Path> &SDB, int threshold, int max_gap): SDB(SDB){
-        this->threshold = threshold;
-        this->max_gap = max_gap;
-    }
-
-    map<vector<ll>, vector<Appearance>>& frequent_sequential_mining(){
-        if(!sequential_patterns.empty()) sequential_patterns.clear();
-
-        map<ll, pair<int, vector<Appearance>>> stub_map;
-        for(Path &path : SDB){
-            unordered_set<ll> cameras;
-            for(int pos_id = 0; pos_id < path.positions.size(); ++pos_id){
-                ll camera_id = path.positions[pos_id].camera_id;
-                cameras.insert(camera_id);
-                Appearance new_appearance(path.object_id, pos_id, pos_id);
-                new_appearance.pids.push_back(pos_id);
-
-                auto itr = stub_map.find(camera_id);
-                if(itr == stub_map.end()){
-                    stub_map.insert(make_pair(
-                            camera_id,
-                            make_pair(0, vector<Appearance>{new_appearance})
-                    ));
-                }
-                else itr->second.second.push_back(new_appearance);
-            }
-            for(ll camera_id : cameras) stub_map.find(camera_id)->second.first += 1;
-        }
-        for(auto &entry : stub_map){
-            if(entry.second.first >= threshold){
-                vector<ll> sequence{entry.first};
-                pattern_growth(sequence, entry.second);
-            }
-        }
-
-        return sequential_patterns;
-    }
-};
 
 class TCS_BIDE{
 private:
@@ -132,6 +24,15 @@ private:
             this->begin_time = begin_time; this->end_time = end_time;
         }
     };
+    // only use for platoon mining
+    struct result_recorder{
+        size_t num_candidates = 0;
+        size_t num_duplications = 0;
+
+        const size_t DUPLICATE_THRS = 1280000;
+        size_t batch_size = 0;
+    };
+
     vector<Path> &SDB;
     int threshold;
     int k;
@@ -317,6 +218,61 @@ private:
         }
     }
 
+    void filter_verify_deduplicate(vector<pair<ll, int>> &mark_seq, vector<Appearance> &appearances, map<vector<int>, map<vector<ll>, vector<pair<double, double>>>> &results, result_recorder &counter){
+        map<pair<ll, int>, pair<set<int>, vector<Appearance>>> forward_items;
+        forward_check(appearances, forward_items);
+        bool has_forward_extension = false;
+        for(auto &entry : forward_items){
+            if(entry.second.first.size() == appearances.size()){
+                has_forward_extension = true;
+                break;
+            }
+        }
+
+        // verify current pattern if necessary
+        if(!has_forward_extension && mark_seq.size() >= k){
+            counter.num_candidates += 1;
+            vector<ll> sequence;
+            for(auto &mark : mark_seq) sequence.push_back(mark.first);
+            // verify
+            vector<pair<vector<ll>, vector<Appearance>>> sequence_wrapper;
+            sequence_wrapper.emplace_back(sequence, appearances);
+            BIDE_Verifier verifier(SDB, threshold, k, max_gap, eps);
+            map<vector<int>, map<vector<ll>, vector<pair<double, double>>>> platoon_map = verifier.verify(sequence_wrapper);
+            // add new platoon patterns (non-maximal) into results
+            for(auto &platoon_entry : platoon_map){
+                const vector<int> &object_ids = platoon_entry.first;
+                auto &res_objects_map = results[object_ids];
+                for(auto &path_entry : platoon_entry.second){
+                    const vector<ll> &cameras = path_entry.first;
+                    auto &res_interval_lst = res_objects_map[cameras];
+
+                    counter.batch_size += path_entry.second.size();
+                    counter.num_duplications += path_entry.second.size();
+                    for(pair<double, double> &interval : path_entry.second)
+                        res_interval_lst.push_back(interval);
+                }
+            }
+            // deduplication if too many new generated platoons
+            if(counter.batch_size >= counter.DUPLICATE_THRS){
+                Deduplicator reducer(results);
+                reducer.deduplicate();
+                counter.batch_size = 0;
+            }
+        }
+
+        // pattern growth
+        for(auto &entry : forward_items){
+            set<int> obj_set;
+            for(Appearance &ap : entry.second.second) obj_set.insert(ap.sid);
+            if(obj_set.size() >= threshold){
+                vector<pair<ll, int>> attached_seq(mark_seq);
+                attached_seq.push_back(entry.first);
+                filter_verify_deduplicate(attached_seq, entry.second.second, results, counter);
+            }
+        }
+    }
+
     void forward_check(vector<Appearance> &appearances, map<pair<ll, int>, pair<set<int>, vector<Appearance>>> &item_map){
         for(int ap_id = 0; ap_id < appearances.size(); ++ap_id){
             Appearance &appearance = appearances[ap_id];
@@ -370,6 +326,38 @@ public:
         }
 
         return sequential_patterns;
+    }
+
+    void platoon_mining(map<vector<int>, map<vector<ll>, vector<pair<double, double>>>> *res_pointer, size_t &n_cand, size_t &n_dupt){
+        map<vector<int>, map<vector<ll>, vector<pair<double, double>>>> &results = *res_pointer;
+        result_recorder counter;
+        map<pair<ll, int>,  vector<Appearance>> stub_map; //<(camera,tcs_id), appearances>
+        for(TCS_Path &path : tcs_paths){
+            for(int idx = 0; idx < path.positions.size(); idx++){
+                ll camera_id = path.positions[idx].camera_id;
+                int meta_id = path.tcs_ids[idx];
+                int pos_id = path.offsets[idx];
+
+                pair<ll, int> mark(camera_id, meta_id);
+                Appearance new_appearance(path.object_id, idx, idx);
+                new_appearance.pids.push_back(pos_id);
+                stub_map[mark].push_back(new_appearance);
+            }
+        }
+
+        for(auto &entry : stub_map){
+            set<int> obj_set;
+            for(Appearance &ap : entry.second) obj_set.insert(ap.sid);
+            if(obj_set.size() >= threshold){
+                vector<pair<ll, int>> mark_seq{entry.first};
+                filter_verify_deduplicate(mark_seq, entry.second, results, counter);
+            }
+        }
+        Deduplicator reducer(results);
+        reducer.deduplicate();
+
+        n_cand = counter.num_candidates;
+        n_dupt = counter.num_duplications;
     }
 
     TCS_BIDE(vector<Path> &SDB, int m, int k, int d, double eps): SDB(SDB){

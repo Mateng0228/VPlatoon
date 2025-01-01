@@ -5,7 +5,7 @@
 #include <set>
 #include <unordered_map>
 #include <climits>
-//#include "fsm.h"
+#include "Utils/structs.h"
 
 class BIDE_Verifier{
 public:

@@ -10,6 +10,7 @@ int main(int argc, char *argv[]){
     int d = stoi(argv[4]);
     double eps = stod(argv[5]);
     Query query(dataset, m, k, d, eps);
+//    query.mine_baseline_integration();
 //    query.mine_baseline();
     query.mine_improved();
 

@@ -31,17 +31,28 @@ public:
         get_paths("datasets/" + this->dataset, travel_paths);
     }
     void mine_baseline();
+    void mine_baseline_integration();
     void mine_improved();
 };
+
+void Query::mine_baseline_integration() {
+    cout<<"Baseline_Integration("<<m<<","<<k<<","<<d<<","<<eps<<"): ";
+    clock_t begin_time = clock();
+
+    ptr_results = new map<vector<int>, map<vector<ll>, vector<pair<double, double>>>>();
+    TCS_BIDE fsm(travel_paths, m, k, d, eps);
+    size_t num_candidates = 0, num_duplications = 0;
+    fsm.platoon_mining(ptr_results, num_candidates, num_duplications);
+
+    cout<<"fsm: ("<<num_candidates<<"), verify: ("<<num_duplications<<"), deduplicate: ("<<get_results_number()<<"), ";
+    cout<<"total time: "<<static_cast<double>(clock() - begin_time) / CLOCKS_PER_SEC<<endl;
+    delete ptr_results;
+}
 
 void Query::mine_baseline() {
     cout<<"Baseline("<<m<<","<<k<<","<<d<<","<<eps<<"): ";
     clock_t begin_time = clock();
 
-//    Gap_BIDE fsm(travel_paths, m, d);
-//    map<vector<ll>, vector<Appearance>> &seq_map = fsm.frequent_sequential_mining();
-//    vector<pair<vector<ll>, vector<Appearance>>> sequences;
-//    for(auto &entry : seq_map) sequences.emplace_back(entry.first, entry.second);
     TCS_BIDE fsm(travel_paths, m, k, d, eps);
     vector<pair<vector<ll>, vector<Appearance>>> &sequences = fsm.frequent_sequential_mining();
     cout<<"fsm: "<<static_cast<double>(clock() - begin_time) / CLOCKS_PER_SEC<<"s("<<sequences.size()<<"), ";
