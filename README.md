@@ -43,12 +43,12 @@ YourExecutableFile "dataset-name" "m" "k" "d" "epsilon"
 - For more detailed and customized execution, please refer to the "main.cpp" source file and modify it as needed.
 
 ## Supplementary Artifacts
-We also provide supplementary codes and artifacts related to the scalability and effectiveness analysis in our paper.
+We also provide the original sources for the external artifacts used in our scalability and effectiveness analyses.
 1. [CityFlowV2](https://www.aicitychallenge.org/2022-data-and-evaluation/): The original video dataset of our recovered trjectory dataset "CityFlow".
-2. [TCS-tree](https://github.com/Mateng0228/Co-movement-Pattern-Mining-from-Videos): The state-of-the-art VConvoy (previous video-based co-movement pattern) mining algorithm.
-3. Multi-camera object tracking algorithms from AI City Challenge [2020](https://github.com/KevinQian97/ELECTRICITY-MTMC) and [2022](https://github.com/Yejin0111/AICITY2022-Track1-MTMC): These are used for trajectory recovery.
+2. Multi-camera object tracking algorithms from AI City Challenge [2020](https://github.com/KevinQian97/ELECTRICITY-MTMC) and [2022](https://github.com/Yejin0111/AICITY2022-Track1-MTMC): These are used for trajectory recovery.
+3. [TCS-tree](https://github.com/Mateng0228/Co-movement-Pattern-Mining-from-Videos): The state-of-the-art VConvoy (previous video-based co-movement pattern) mining algorithm.
 4. [TMerge](https://ieeexplore.ieee.org/abstract/document/10184538/): The track merging algorithm used to refine recovered trajectories in the effectiveness experiment.
-5. [motmetrics](https://github.com/cheind/py-motmetrics): A library for addressing IDF-related issues.
+5. [motmetrics](https://github.com/cheind/py-motmetrics): The library for addressing IDF-related issues.
 
 
 ## Contact
